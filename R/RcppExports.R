@@ -25,14 +25,6 @@ fastJacc <- function(m, ncores = 1L, verbose = TRUE, full = FALSE, diag = TRUE, 
     .Call(`_sparseDist_fastJacc`, m, ncores, verbose, full, diag, dist)
 }
 
-fastWeightedJacc2 <- function(m, m2, ncores = 1L, verbose = TRUE, dist = TRUE) {
-    .Call(`_sparseDist_fastWeightedJacc2`, m, m2, ncores, verbose, dist)
-}
-
-fastWeightedJacc <- function(m, ncores = 1L, verbose = TRUE, full = FALSE, diag = TRUE, dist = TRUE) {
-    .Call(`_sparseDist_fastWeightedJacc`, m, ncores, verbose, full, diag, dist)
-}
-
 fastManhattan <- function(m, ncores = 1L, verbose = TRUE, full = FALSE, diag = TRUE) {
     .Call(`_sparseDist_fastManhattan`, m, ncores, verbose, full, diag)
 }

@@ -103,37 +103,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// fastWeightedJacc2
-arma::sp_mat fastWeightedJacc2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose, bool dist);
-RcppExport SEXP _sparseDist_fastWeightedJacc2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP distSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::sp_mat& >::type m(mSEXP);
-    Rcpp::traits::input_parameter< const arma::sp_mat& >::type m2(m2SEXP);
-    Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< bool >::type dist(distSEXP);
-    rcpp_result_gen = Rcpp::wrap(fastWeightedJacc2(m, m2, ncores, verbose, dist));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fastWeightedJacc
-arma::sp_mat fastWeightedJacc(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
-RcppExport SEXP _sparseDist_fastWeightedJacc(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP, SEXP distSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::sp_mat& >::type m(mSEXP);
-    Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< bool >::type full(fullSEXP);
-    Rcpp::traits::input_parameter< bool >::type diag(diagSEXP);
-    Rcpp::traits::input_parameter< bool >::type dist(distSEXP);
-    rcpp_result_gen = Rcpp::wrap(fastWeightedJacc(m, ncores, verbose, full, diag, dist));
-    return rcpp_result_gen;
-END_RCPP
-}
 // fastManhattan
 arma::sp_mat fastManhattan(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag);
 RcppExport SEXP _sparseDist_fastManhattan(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP) {
@@ -232,8 +201,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_sparseDist_fastCov2", (DL_FUNC) &_sparseDist_fastCov2, 4},
     {"_sparseDist_fastJacc2", (DL_FUNC) &_sparseDist_fastJacc2, 5},
     {"_sparseDist_fastJacc", (DL_FUNC) &_sparseDist_fastJacc, 6},
-    {"_sparseDist_fastWeightedJacc2", (DL_FUNC) &_sparseDist_fastWeightedJacc2, 5},
-    {"_sparseDist_fastWeightedJacc", (DL_FUNC) &_sparseDist_fastWeightedJacc, 6},
     {"_sparseDist_fastManhattan", (DL_FUNC) &_sparseDist_fastManhattan, 5},
     {"_sparseDist_fastManhattan2", (DL_FUNC) &_sparseDist_fastManhattan2, 5},
     {"_sparseDist_fastEuclidean", (DL_FUNC) &_sparseDist_fastEuclidean, 5},
