@@ -1,0 +1,19 @@
+Package: sparseDist
+Title: Optimized Distances calculation on sparse matrix based on RcppArmadillo
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Gennaro",
+           family = "Gambardella",
+           role = c("aut", "cre"),
+           email = "gambardella@tigem.it",
+           comment = c(ORCID = "0000-0001-7517-1347"))
+Description: What the package does (one paragraph).
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Depends: R (>= 3.6)
+LinkingTo: Rcpp (>= 0.11.0), RcppArmadillo, RcppProgress
+Imports: 
+    Matrix
