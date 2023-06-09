@@ -38,7 +38,7 @@ arma::sp_mat fastCorr(const arma::sp_mat& m, int ncores=1, bool verbose=true, bo
 }
 
 // [[Rcpp::export]]
-arma::sp_mat fastCorr2(const arma::sp_mat& m, const arma::mat& m2, int ncores=1, bool verbose=true, bool dist=true)
+arma::sp_mat fastCorr2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores=1, bool verbose=true, bool dist=true)
 {
 
   if(m.n_rows != m2.n_rows) {
@@ -88,7 +88,7 @@ arma::sp_mat fastCov(const arma::sp_mat& m, int ncores=1, bool verbose=true, boo
 }
 
 // [[Rcpp::export]]
-arma::sp_mat fastCov2(const arma::sp_mat& m, const arma::mat& m2, int ncores=1, bool verbose=true)
+arma::sp_mat fastCov2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores=1, bool verbose=true)
 {
 
   if(m.n_rows != m2.n_rows) {
