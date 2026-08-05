@@ -1,7 +1,22 @@
-# Turn on C++11 support to get access to long long (guaranteed 64-bit ints)
-CXX_STD = CXX11
+# Windows (Rtools) build: identical to the Unix Makevars. Rtools ships a GCC
+# toolchain with working OpenMP, so no extra configuration is needed here.
+# No CXX_STD is set here, deliberately. Since R 4.3 the default C++ standard is
+# C++17, and R CMD check raises a NOTE -- which blocks CRAN submission -- for
+# any standard specified BELOW the current default. This package needs only
+# C++11 features (std::thread in detectCores.cpp), so the default is always
+# sufficient. Do not re-add that setting, nor a SystemRequirements: C++nn line
+# in DESCRIPTION, unless a genuinely newer standard becomes necessary.
 
-# OMP
-PKG_CXXFLAGS += -I"./include" $(SHLIB_OPENMP_CXXFLAGS)
-PKG_LIBS += $(SHLIB_OPENMP_CXXFLAGS)
-PKG_CPPFLAGS += -DARMA_64BIT_WORD=1
+# 64-bit Armadillo word: needed for matrices with >2^31 elements. Applies to
+# every translation unit, which is required -- a mismatch between files would
+# be an ODR violation.
+PKG_CPPFLAGS = -DARMA_64BIT_WORD=1
+
+# OpenMP. On platforms without it these expand to nothing, the pragmas are
+# ignored, and the kernels run correctly but single-threaded.
+PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)
+
+# OpenMP must appear in PKG_LIBS as well, or the shared object fails to load
+# with "undefined symbol: GOMP_parallel". LAPACK/BLAS/FLIBS are the standard
+# RcppArmadillo link line.
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)

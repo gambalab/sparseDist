@@ -11,8 +11,32 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// detectCoresCpp
+int detectCoresCpp();
+RcppExport SEXP _sparseDist_detectCoresCpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(detectCoresCpp());
+    return rcpp_result_gen;
+END_RCPP
+}
+// snnJaccard
+Rcpp::NumericMatrix snnJaccard(const Rcpp::IntegerMatrix& idx, bool include_self, int ncores, bool verbose);
+RcppExport SEXP _sparseDist_snnJaccard(SEXP idxSEXP, SEXP include_selfSEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerMatrix& >::type idx(idxSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_self(include_selfSEXP);
+    Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    rcpp_result_gen = Rcpp::wrap(snnJaccard(idx, include_self, ncores, verbose));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fastCorr
-arma::sp_mat fastCorr(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
+SEXP fastCorr(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
 RcppExport SEXP _sparseDist_fastCorr(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP, SEXP distSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -28,13 +52,13 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastCorr2
-arma::sp_mat fastCorr2(const arma::sp_mat& m, const arma::mat& m2, int ncores, bool verbose, bool dist);
+SEXP fastCorr2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose, bool dist);
 RcppExport SEXP _sparseDist_fastCorr2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP distSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::sp_mat& >::type m(mSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type m2(m2SEXP);
+    Rcpp::traits::input_parameter< const arma::sp_mat& >::type m2(m2SEXP);
     Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< bool >::type dist(distSEXP);
@@ -43,8 +67,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastCov
-arma::sp_mat fastCov(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
-RcppExport SEXP _sparseDist_fastCov(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP, SEXP distSEXP) {
+arma::sp_mat fastCov(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag);
+RcppExport SEXP _sparseDist_fastCov(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -53,19 +77,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< bool >::type full(fullSEXP);
     Rcpp::traits::input_parameter< bool >::type diag(diagSEXP);
-    Rcpp::traits::input_parameter< bool >::type dist(distSEXP);
-    rcpp_result_gen = Rcpp::wrap(fastCov(m, ncores, verbose, full, diag, dist));
+    rcpp_result_gen = Rcpp::wrap(fastCov(m, ncores, verbose, full, diag));
     return rcpp_result_gen;
 END_RCPP
 }
 // fastCov2
-arma::sp_mat fastCov2(const arma::sp_mat& m, const arma::mat& m2, int ncores, bool verbose);
+arma::sp_mat fastCov2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose);
 RcppExport SEXP _sparseDist_fastCov2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::sp_mat& >::type m(mSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type m2(m2SEXP);
+    Rcpp::traits::input_parameter< const arma::sp_mat& >::type m2(m2SEXP);
     Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     rcpp_result_gen = Rcpp::wrap(fastCov2(m, m2, ncores, verbose));
@@ -73,7 +96,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastJacc2
-arma::sp_mat fastJacc2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose, bool dist);
+SEXP fastJacc2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose, bool dist);
 RcppExport SEXP _sparseDist_fastJacc2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP distSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -88,7 +111,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastJacc
-arma::sp_mat fastJacc(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
+SEXP fastJacc(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
 RcppExport SEXP _sparseDist_fastJacc(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP, SEXP distSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -104,7 +127,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastManhattan
-arma::sp_mat fastManhattan(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag);
+arma::mat fastManhattan(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag);
 RcppExport SEXP _sparseDist_fastManhattan(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -119,8 +142,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastManhattan2
-arma::sp_mat fastManhattan2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose, bool dist);
-RcppExport SEXP _sparseDist_fastManhattan2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP distSEXP) {
+arma::mat fastManhattan2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose);
+RcppExport SEXP _sparseDist_fastManhattan2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -128,13 +151,12 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::sp_mat& >::type m2(m2SEXP);
     Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< bool >::type dist(distSEXP);
-    rcpp_result_gen = Rcpp::wrap(fastManhattan2(m, m2, ncores, verbose, dist));
+    rcpp_result_gen = Rcpp::wrap(fastManhattan2(m, m2, ncores, verbose));
     return rcpp_result_gen;
 END_RCPP
 }
 // fastEuclidean
-arma::sp_mat fastEuclidean(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag);
+arma::mat fastEuclidean(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag);
 RcppExport SEXP _sparseDist_fastEuclidean(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -149,7 +171,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastEuclidean2
-arma::sp_mat fastEuclidean2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose);
+arma::mat fastEuclidean2(const arma::sp_mat& m, const arma::sp_mat& m2, int ncores, bool verbose);
 RcppExport SEXP _sparseDist_fastEuclidean2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -163,7 +185,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastJS
-arma::sp_mat fastJS(const arma::mat& m, int ncores, bool verbose, bool full, bool diag);
+arma::mat fastJS(const arma::mat& m, int ncores, bool verbose, bool full, bool diag);
 RcppExport SEXP _sparseDist_fastJS(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -178,7 +200,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // fastJS2
-arma::sp_mat fastJS2(const arma::mat& m, const arma::mat& m2, int ncores, bool verbose);
+arma::mat fastJS2(const arma::mat& m, const arma::mat& m2, int ncores, bool verbose);
 RcppExport SEXP _sparseDist_fastJS2(SEXP mSEXP, SEXP m2SEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -191,23 +213,38 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-
-RcppExport SEXP detectCoresCpp(void);
+// topKBlock
+Rcpp::List topKBlock(const arma::mat& D, int k, bool decreasing, const Rcpp::IntegerVector& self_row, int ncores);
+RcppExport SEXP _sparseDist_topKBlock(SEXP DSEXP, SEXP kSEXP, SEXP decreasingSEXP, SEXP self_rowSEXP, SEXP ncoresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type D(DSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< bool >::type decreasing(decreasingSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type self_row(self_rowSEXP);
+    Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
+    rcpp_result_gen = Rcpp::wrap(topKBlock(D, k, decreasing, self_row, ncores));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_sparseDist_detectCoresCpp", (DL_FUNC) &_sparseDist_detectCoresCpp, 0},
+    {"_sparseDist_snnJaccard", (DL_FUNC) &_sparseDist_snnJaccard, 4},
     {"_sparseDist_fastCorr", (DL_FUNC) &_sparseDist_fastCorr, 6},
     {"_sparseDist_fastCorr2", (DL_FUNC) &_sparseDist_fastCorr2, 5},
-    {"_sparseDist_fastCov", (DL_FUNC) &_sparseDist_fastCov, 6},
+    {"_sparseDist_fastCov", (DL_FUNC) &_sparseDist_fastCov, 5},
     {"_sparseDist_fastCov2", (DL_FUNC) &_sparseDist_fastCov2, 4},
     {"_sparseDist_fastJacc2", (DL_FUNC) &_sparseDist_fastJacc2, 5},
     {"_sparseDist_fastJacc", (DL_FUNC) &_sparseDist_fastJacc, 6},
     {"_sparseDist_fastManhattan", (DL_FUNC) &_sparseDist_fastManhattan, 5},
-    {"_sparseDist_fastManhattan2", (DL_FUNC) &_sparseDist_fastManhattan2, 5},
+    {"_sparseDist_fastManhattan2", (DL_FUNC) &_sparseDist_fastManhattan2, 4},
     {"_sparseDist_fastEuclidean", (DL_FUNC) &_sparseDist_fastEuclidean, 5},
     {"_sparseDist_fastEuclidean2", (DL_FUNC) &_sparseDist_fastEuclidean2, 4},
     {"_sparseDist_fastJS", (DL_FUNC) &_sparseDist_fastJS, 5},
     {"_sparseDist_fastJS2", (DL_FUNC) &_sparseDist_fastJS2, 4},
-    {"detectCoresCpp", (DL_FUNC) &detectCoresCpp, 0},
+    {"_sparseDist_topKBlock", (DL_FUNC) &_sparseDist_topKBlock, 5},
     {NULL, NULL, 0}
 };
 

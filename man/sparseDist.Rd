@@ -2,37 +2,129 @@
 % Please edit documentation in R/sparseDist.R
 \name{sparseDist}
 \alias{sparseDist}
-\title{Optimized Distances calculation on sparse matrix}
+\title{Optimized distance calculation on sparse matrices}
 \usage{
 sparseDist(
   X,
   Y = NULL,
-  method = "jaccard",
-  ncores = 0,
-  verbose = T,
-  full = F,
-  diag = F,
-  dist = T
+  method = "binary",
+  ncores = 1,
+  verbose = TRUE,
+  full = FALSE,
+  diag = FALSE,
+  dist = TRUE
 )
 }
 \arguments{
-\item{X}{dgMatrix; a sparse matrix where columns are variables and rows observations.}
+\item{X}{A matrix whose columns are variables and rows are observations.
+Sparse input (a \code{Matrix::dgCMatrix}, or any \code{CsparseMatrix}) is
+recommended; dense matrices and data frames are coerced automatically.}
 
-\item{Y}{dgMatrix; a sparse matrix where columns are variables and rows observations.}
+\item{Y}{Optional second matrix with the same number of rows as \code{X}.
+When supplied, a rectangular (cross) matrix between the columns of \code{X}
+and the columns of \code{Y} is returned.}
 
-\item{method}{string; a character string indicating which distance is to be computed. One of "binary" (i.e., jaccard) (default), "fJaccard", "euclidean","manhattan" or "pearson". Default binary}
+\item{method}{Character; the distance to compute. One of \code{"binary"}
+(Jaccard on the sparsity pattern; the default), \code{"jaccard"} (an alias
+for \code{"binary"}), \code{"euclidean"}, \code{"manhattan"},
+\code{"pearson"}, \code{"js"} (Jensen-Shannon) or \code{"covariance"}.}
 
-\item{ncores}{numeric; number of cpu to use. Default value is 0 (i.e., number of cpus is auto detected and available number of cpu minus one are used).}
+\item{ncores}{Numeric; number of threads to use. The default is \code{1}
+(serial). Pass \code{0} to auto-detect the available cores and use that
+number minus one. Note that CRAN limits package checks to two cores, so
+examples, tests and vignettes should pass \code{ncores = 1} or \code{2}
+rather than relying on auto-detection.}
 
-\item{verbose}{boolean; Show progress bar. Default is TRUE.}
+\item{verbose}{Logical; show a progress bar. Default \code{TRUE}.}
 
-\item{full}{boolean; Compute the full matrix (TRUE) or just low triangle (FALSE). Default is FALSE. This param id ignored when X and Y are used as input. If two matrices are passed as input the output matrix will be always a full matrix.}
+\item{full}{Logical; return the full symmetric matrix (\code{TRUE}) or only
+the lower triangle (\code{FALSE}, the default). This applies to every
+single-matrix method. It is ignored when \code{Y} is supplied, in which
+case the full rectangular matrix is always returned.}
 
-\item{diag}{boolean; Compute diagonal. Default is FALSE.}
+\item{diag}{Logical; compute the diagonal explicitly in the pairwise loop.
+Default \code{FALSE}. The diagonal of a \code{"binary"} or
+\code{"pearson"} result is correct either way (see \emph{Details}); for
+\code{"covariance"} it is the column variance and is only computed when
+\code{diag = TRUE}.}
 
-\item{dist}{boolean; If this parameter is set to FALSE, in the case of binary (i.e.,jaccard),and pearson the similarity coefficient instead of the distance is returned . Defaullt value is TRUE and distance value is returned.}
+\item{dist}{Logical; for \code{"binary"} and \code{"pearson"}, return the
+distance (\code{TRUE}, the default) or the similarity/coefficient
+(\code{FALSE}). Ignored by the other methods. Note that this also selects
+the storage of the result -- see \emph{Value}.}
+}
+\value{
+A matrix of distances or similarities, whose storage follows the
+nature of the result:
+\itemize{
+\item a \strong{dense} base \code{matrix} for distance-valued results --
+\code{"euclidean"}, \code{"manhattan"}, \code{"js"}, and
+\code{"binary"}/\code{"pearson"} with \code{dist = TRUE}. For sparse
+input most column pairs share nothing, which makes their \emph{distance}
+non-zero, so these matrices are nearly full and a sparse representation
+would cost more memory than it saves. A dense result also means a stored
+\code{0} unambiguously denotes identical columns, and a lower-triangular
+result can be passed straight to \code{\link[stats]{as.dist}}.
+\item a \strong{sparse} \code{dgCMatrix} for coefficient-valued results --
+\code{"covariance"}, and \code{"binary"}/\code{"pearson"} with
+\code{dist = FALSE}. Jaccard similarity is exactly \code{0} for disjoint
+column pairs, so these zeros are real. (For \code{"pearson"} and
+\code{"covariance"} the sparsity is only structural -- the unwritten
+upper triangle when \code{full = FALSE}, plus degenerate columns mapped
+to \code{0} -- since disjoint columns still give a small non-zero value.)
+}
+In both cases the dimension names are taken from the column names of
+\code{X} (rows) and of \code{Y} (columns), or of \code{X} on both axes when
+\code{Y} is \code{NULL}.
 }
 \description{
-Calculates distance matrices in parallel using multiple threads. Distances are computed among the cols of a sparse data matrix.
-Code have been optimaized for highly sparse large matricies.
+Computes column-wise distance (or similarity) matrices in parallel using
+multiple threads. Distances are computed among the columns of a sparse data
+matrix. The code is optimized for highly sparse, large matrices.
+}
+\details{
+For \code{method = "js"} the columns must be non-negative (and should sum to
+1 for a genuine Jensen-Shannon divergence). Non-negativity is enforced by the
+underlying kernel and an error is raised otherwise; normalization is left to
+the caller. The value returned is the \emph{standard} Jensen-Shannon
+distance \code{sqrt(JSD)} -- a true metric, bounded above by
+\code{sqrt(log(2))} in nats. (Versions of this package before the fix
+returned \code{sqrt(2 * JSD)}, i.e. \code{sqrt(2)} times larger.)
+
+In similarity mode (\code{dist = FALSE}) the diagonal of the
+\code{"binary"} and \code{"pearson"} results is always 1, the
+self-similarity of a column, irrespective of \code{diag}. In distance mode
+it is 0. \code{diag} therefore controls how much work the kernel does, not
+whether the diagonal is meaningful.
+
+The result is accumulated in a dense buffer inside the C++ kernels regardless
+of the storage that is finally returned. That is required for correctness of
+the parallel fill, not merely for speed: inserting into a compressed-sparse
+structure from several threads would corrupt it. Peak memory is therefore
+O(ncol^2) for every method.
+}
+\examples{
+set.seed(1)
+X <- abs(Matrix::rsparsematrix(100, 8, density = 0.3))
+colnames(X) <- paste0("c", seq_len(ncol(X)))
+
+# Jaccard distance among the columns: dense lower triangle
+sparseDist(X, method = "binary", ncores = 1, verbose = FALSE)[1:4, 1:4]
+
+# the similarity form instead: sparse, with a unit diagonal
+sparseDist(X, method = "binary", dist = FALSE, ncores = 1,
+           verbose = FALSE)[1:4, 1:4]
+
+# cross-distances between the columns of two matrices
+Y <- X[, 1:3]
+sparseDist(X, Y, method = "euclidean", ncores = 1, verbose = FALSE)[1:4, ]
+
+# Jensen-Shannon requires non-negative columns; normalise them to sum to 1
+# for a true divergence (the kernel does not normalise for you)
+P <- as.matrix(X)
+keep <- colSums(P) > 0
+P <- sweep(P[, keep, drop = FALSE], 2, colSums(P[, keep, drop = FALSE]), "/")
+sparseDist(P, method = "js", full = TRUE, diag = TRUE,
+           ncores = 1, verbose = FALSE)[1:4, 1:4]
+
 }

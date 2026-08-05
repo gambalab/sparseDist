@@ -1,5 +1,5 @@
 Package: sparseDist
-Title: Optimized Distances calculation on sparse matrix based on RcppArmadillo
+Title: Optimized Distance and Similarity Matrices for Sparse Data
 Version: 0.0.0.9000
 Authors@R: 
     person(given = "Gennaro",
@@ -7,13 +7,32 @@ Authors@R:
            role = c("aut", "cre"),
            email = "gambardella@tigem.it",
            comment = c(ORCID = "0000-0001-7517-1347"))
-Description: What the package does (one paragraph).
+Description: Computes column-wise distances, similarities, and memory-bounded
+    k-nearest-neighbour searches for large, highly sparse data. Jaccard,
+    Euclidean, Manhattan, Jensen-Shannon, Pearson correlation and covariance
+    are supported, either among the columns of a single matrix or between the
+    columns of two matrices. A full matrix needs memory quadratic in the number
+    of columns, so a blocked search is also provided that returns only the k
+    nearest neighbours of each column and never materialises the whole result.
+    The kernels are written in C++ using 'RcppArmadillo', are parallelised with
+    'OpenMP' where the compiler supports it, and report progress through
+    'RcppProgress'. The Jaccard, Euclidean and Manhattan sparse kernels
+    traverse only stored non-zero entries, so their pairwise cost depends on
+    sparsity rather than on the full matrix dimensions.
 License: GPL-3
 Encoding: UTF-8
-LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
-Depends: R (>= 3.6)
-LinkingTo: Rcpp (>= 0.11.0), RcppArmadillo, RcppProgress
+Depends: R (>= 4.0)
+LinkingTo: 
+    Rcpp (>= 0.11.0),
+    RcppArmadillo,
+    RcppProgress
 Imports: 
-    Matrix
+    Rcpp,
+    Matrix,
+    methods,
+    utils
+Suggests: 
+    testthat (>= 3.2.0)
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
