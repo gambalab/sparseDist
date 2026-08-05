@@ -19,7 +19,7 @@ install.packages("sparseDist")
 
 # development version
 # install.packages("remotes")
-remotes::install_github("<your-github-user>/sparseDist")
+remotes::install_github("gambalab/sparseDist")
 ```
 
 ## Quick start
