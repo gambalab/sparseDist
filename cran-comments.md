@@ -6,9 +6,12 @@
 
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes
+0 errors | 0 warnings | 0 note
 
 This is a new release.
+
+* The check flags "Jaccard" in DESCRIPTION as possibly misspelled. It is a
+  proper noun (Paul Jaccard) and is spelled correctly.
 
 ## Notes for the reviewer
 
