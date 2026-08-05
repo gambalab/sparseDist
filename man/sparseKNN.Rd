@@ -29,13 +29,15 @@ the columns of \code{X} itself otherwise.}
 
 \item{method}{Distance or similarity to use; see \code{\link{sparseDist}}.}
 
-\item{dist}{Logical; for \code{"binary"} and \code{"pearson"}, \code{TRUE}
+\item{dist}{Logical; for \code{"binary"}, \code{"cosine"} and
+\code{"pearson"}, \code{TRUE}
 (the default) ranks by distance and keeps the \code{k} smallest values,
 while \code{FALSE} ranks by similarity and keeps the \code{k} largest.
 The other methods have only one form, so the ranking direction is fixed:
 \code{"euclidean"}, \code{"manhattan"} and \code{"js"} are distances
 (smallest kept) and reject \code{dist = FALSE}; \code{"covariance"} is a
-coefficient and always keeps the largest values, ignoring \code{dist}.}
+coefficient and always keeps the largest values, ignoring \code{dist}.
+\code{"binary"}, \code{"cosine"} and \code{"pearson"} have both forms.}
 
 \item{include_self}{Logical; when \code{Y} is \code{NULL}, whether a column
 may be returned as its own neighbour. Defaults to \code{FALSE}, matching

@@ -322,3 +322,26 @@ test_that("counts above .Machine$integer.max are rejected", {
   expect_error(sparseKNN(X, k = 3, ncores = 3e9, verbose = FALSE),
                "integer.max")
 })
+
+test_that("cosine works in the blocked search", {
+  X <- make_X()
+  full <- as.matrix(sparseDist(X, method = "cosine", full = TRUE, diag = TRUE,
+                               ncores = 1, verbose = FALSE))
+  ref <- ref_topk(full, k = 4, decreasing = FALSE, exclude_self = TRUE)
+  got <- sparseKNN(X, k = 4, method = "cosine", ncores = 1, verbose = FALSE)
+  expect_equal(unname(got$idx), ref$idx)
+  expect_equal(unname(got$dist), ref$dist)
+
+  # similarity mode keeps the largest
+  fsim <- as.matrix(sparseDist(X, method = "cosine", dist = FALSE, full = TRUE,
+                               diag = TRUE, ncores = 1, verbose = FALSE))
+  rsim <- ref_topk(fsim, k = 4, decreasing = TRUE, exclude_self = TRUE)
+  gsim <- sparseKNN(X, k = 4, method = "cosine", dist = FALSE,
+                    ncores = 1, verbose = FALSE)
+  expect_equal(unname(gsim$idx), rsim$idx)
+
+  # self values are restored exactly in the blocked path
+  s <- sparseKNN(X, k = 3, method = "cosine", include_self = TRUE,
+                 ncores = 1, verbose = FALSE)
+  expect_identical(unname(s$dist[, 1]), rep(0, ncol(X)))
+})

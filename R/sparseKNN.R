@@ -41,13 +41,15 @@
 #'   the columns of \code{X} itself otherwise.
 #' @param k Number of neighbours to return per column.
 #' @param method Distance or similarity to use; see \code{\link{sparseDist}}.
-#' @param dist Logical; for \code{"binary"} and \code{"pearson"}, \code{TRUE}
+#' @param dist Logical; for \code{"binary"}, \code{"cosine"} and
+#'   \code{"pearson"}, \code{TRUE}
 #'   (the default) ranks by distance and keeps the \code{k} smallest values,
 #'   while \code{FALSE} ranks by similarity and keeps the \code{k} largest.
 #'   The other methods have only one form, so the ranking direction is fixed:
 #'   \code{"euclidean"}, \code{"manhattan"} and \code{"js"} are distances
 #'   (smallest kept) and reject \code{dist = FALSE}; \code{"covariance"} is a
 #'   coefficient and always keeps the largest values, ignoring \code{dist}.
+#'   \code{"binary"}, \code{"cosine"} and \code{"pearson"} have both forms.
 #' @param include_self Logical; when \code{Y} is \code{NULL}, whether a column
 #'   may be returned as its own neighbour. Defaults to \code{FALSE}, matching
 #'   the usual k-nearest-neighbour convention. Ignored when \code{Y} is given,
@@ -140,7 +142,7 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
 
   method <- match.arg(
     method,
-    choices = c("binary", "jaccard", "euclidean", "manhattan",
+    choices = c("binary", "jaccard", "cosine", "euclidean", "manhattan",
                 "pearson", "js", "covariance")
   )
   if (method == "jaccard") method <- "binary"
@@ -151,12 +153,13 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
   ## (e.g. returning the FARTHEST columns for method = "euclidean",
   ## dist = FALSE, or the most negative covariances by default).
   if (method %in% c("euclidean", "manhattan", "js") && !isTRUE(dist)) {
-    stop("'dist = FALSE' is only meaningful for methods \"binary\" and ",
-         "\"pearson\"; ", method, " has no similarity form.")
+    stop("'dist = FALSE' is only meaningful for methods \"binary\", ",
+         "\"cosine\" and \"pearson\"; ", method, " has no similarity form.")
   }
   decreasing <- switch(
     method,
     binary     = !isTRUE(dist),   # similarity -> keep the largest
+    cosine     = !isTRUE(dist),
     pearson    = !isTRUE(dist),
     covariance = TRUE,            # always a coefficient: keep the largest
     euclidean  = FALSE,           # always a distance: keep the smallest
@@ -235,7 +238,7 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
     ## actually kept; otherwise those entries are excluded anyway.
     if (selfmode && include_self) {
       self_pos <- cbind(cols, seq_along(cols))
-      if (method %in% c("binary", "pearson")) {
+      if (method %in% c("binary", "cosine", "pearson")) {
         D[self_pos] <- if (dist) 0 else 1
       } else if (method %in% c("euclidean", "manhattan", "js")) {
         D[self_pos] <- 0

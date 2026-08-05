@@ -49,6 +49,14 @@ fastEuclidean2 <- function(m, m2, ncores = 1L, verbose = TRUE) {
     .Call(`_sparseDist_fastEuclidean2`, m, m2, ncores, verbose)
 }
 
+fastCosine <- function(m, ncores = 1L, verbose = TRUE, full = FALSE, diag = TRUE, dist = TRUE) {
+    .Call(`_sparseDist_fastCosine`, m, ncores, verbose, full, diag, dist)
+}
+
+fastCosine2 <- function(m, m2, ncores = 1L, verbose = TRUE, dist = TRUE) {
+    .Call(`_sparseDist_fastCosine2`, m, m2, ncores, verbose, dist)
+}
+
 fastJS <- function(m, ncores = 1L, verbose = TRUE, full = FALSE, diag = TRUE) {
     .Call(`_sparseDist_fastJS`, m, ncores, verbose, full, diag)
 }

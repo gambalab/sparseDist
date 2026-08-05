@@ -26,8 +26,9 @@ and the columns of \code{Y} is returned.}
 
 \item{method}{Character; the distance to compute. One of \code{"binary"}
 (Jaccard on the sparsity pattern; the default), \code{"jaccard"} (an alias
-for \code{"binary"}), \code{"euclidean"}, \code{"manhattan"},
-\code{"pearson"}, \code{"js"} (Jensen-Shannon) or \code{"covariance"}.}
+for \code{"binary"}), \code{"cosine"}, \code{"euclidean"},
+\code{"manhattan"}, \code{"pearson"}, \code{"js"} (Jensen-Shannon) or
+\code{"covariance"}.}
 
 \item{ncores}{Numeric; number of threads to use. The default is \code{1}
 (serial). Pass \code{0} to auto-detect the available cores and use that
@@ -43,12 +44,13 @@ single-matrix method. It is ignored when \code{Y} is supplied, in which
 case the full rectangular matrix is always returned.}
 
 \item{diag}{Logical; compute the diagonal explicitly in the pairwise loop.
-Default \code{FALSE}. The diagonal of a \code{"binary"} or
-\code{"pearson"} result is correct either way (see \emph{Details}); for
+Default \code{FALSE}. The diagonal of a \code{"binary"}, \code{"cosine"}
+or \code{"pearson"} result is correct either way (see \emph{Details}); for
 \code{"covariance"} it is the column variance and is only computed when
 \code{diag = TRUE}.}
 
-\item{dist}{Logical; for \code{"binary"} and \code{"pearson"}, return the
+\item{dist}{Logical; for \code{"binary"}, \code{"cosine"} and
+\code{"pearson"}, return the
 distance (\code{TRUE}, the default) or the similarity/coefficient
 (\code{FALSE}). Ignored by the other methods. Note that this also selects
 the storage of the result -- see \emph{Value}.}
@@ -59,16 +61,17 @@ nature of the result:
 \itemize{
 \item a \strong{dense} base \code{matrix} for distance-valued results --
 \code{"euclidean"}, \code{"manhattan"}, \code{"js"}, and
-\code{"binary"}/\code{"pearson"} with \code{dist = TRUE}. For sparse
+\code{"binary"}/\code{"cosine"}/\code{"pearson"} with
+\code{dist = TRUE}. For sparse
 input most column pairs share nothing, which makes their \emph{distance}
 non-zero, so these matrices are nearly full and a sparse representation
 would cost more memory than it saves. A dense result also means a stored
 \code{0} unambiguously denotes identical columns, and a lower-triangular
 result can be passed straight to \code{\link[stats]{as.dist}}.
 \item a \strong{sparse} \code{dgCMatrix} for coefficient-valued results --
-\code{"covariance"}, and \code{"binary"}/\code{"pearson"} with
-\code{dist = FALSE}. Jaccard similarity is exactly \code{0} for disjoint
-column pairs, so these zeros are real. (For \code{"pearson"} and
+\code{"covariance"}, and \code{"binary"}/\code{"cosine"}/\code{"pearson"}
+with \code{dist = FALSE}. Jaccard and cosine similarity are exactly
+\code{0} for disjoint column pairs, so these zeros are real. (For \code{"pearson"} and
 \code{"covariance"} the sparsity is only structural -- the unwritten
 upper triangle when \code{full = FALSE}, plus degenerate columns mapped
 to \code{0} -- since disjoint columns still give a small non-zero value.)
@@ -83,6 +86,26 @@ multiple threads. Distances are computed among the columns of a sparse data
 matrix. The code is optimized for highly sparse, large matrices.
 }
 \details{
+\code{method = "cosine"} returns the cosine similarity, or \code{1 - cosine}
+when \code{dist = TRUE} -- the usual convention when comparing embeddings.
+Note that \code{1 - cosine} is not a metric (the triangle inequality can
+fail); use \code{acos()} on the similarity, divided by \code{pi}, if a true
+angular metric is required -- itself a metric only among columns of non-zero
+norm, since the zero-vector values below are conventional. Like the other sparse kernels it walks only the
+stored non-zero entries, so it does not densify any column.
+
+An all-zero column has an undefined cosine, so the following are
+conventions rather than derived values, chosen to agree with the Jaccard
+kernel: two empty columns have similarity 1 (distance 0), since they are the
+same vector and two empty sets are likewise treated as identical; a pairing
+of one empty with one non-empty column has similarity 0 (distance 1); and a
+known self-comparison is 1 (distance 0) whatever the column contains.
+Non-finite entries (\code{NA}, \code{NaN}, \code{Inf}) are rejected with an
+error rather than folded into a plausible-looking result. Because only the single-matrix form knows
+which comparisons are self-comparisons, \code{sparseDist(X)} and
+\code{sparseDist(X, X)} differ on the diagonal for empty columns;
+\code{\link{sparseKNN}} restores the exact self-values itself.
+
 For \code{method = "js"} the columns must be non-negative (and should sum to
 1 for a genuine Jensen-Shannon divergence). Non-negativity is enforced by the
 underlying kernel and an error is raised otherwise; normalization is left to
@@ -92,8 +115,8 @@ distance \code{sqrt(JSD)} -- a true metric, bounded above by
 returned \code{sqrt(2 * JSD)}, i.e. \code{sqrt(2)} times larger.)
 
 In similarity mode (\code{dist = FALSE}) the diagonal of the
-\code{"binary"} and \code{"pearson"} results is always 1, the
-self-similarity of a column, irrespective of \code{diag}. In distance mode
+\code{"binary"}, \code{"cosine"} and \code{"pearson"} results is always 1,
+the self-similarity of a column, irrespective of \code{diag}. In distance mode
 it is 0. \code{diag} therefore controls how much work the kernel does, not
 whether the diagonal is meaningful.
 
