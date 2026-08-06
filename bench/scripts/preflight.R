@@ -52,6 +52,15 @@ if (!file.exists(loader)) {
 }
 source(loader)
 
+## Put the benchmark library on the path BEFORE checking for packages --
+## otherwise everything installed into it reports as missing, which is a path
+## problem wearing the costume of an install problem.
+lib <- use_bench_library(root)
+check("benchmark library", !is.na(lib),
+      if (is.na(lib))
+        "not found: set BENCH_LIB, or run setup.R to record it in the manifest"
+      else lib)
+
 present <- harness_status(root)
 for (f in names(present)) check(f, present[[f]],
                                 if (present[[f]]) "" else "MISSING")
@@ -81,10 +90,22 @@ check("sparseDist OpenMP", cap$openmp,
       if (cap$openmp) paste0("spec ", cap$omp_spec)
       else "absent -- correctness only, no timings",
       required = FALSE)
-check("OpenMP procs / hardware", TRUE,
-      paste0(cap$num_procs, " / ", cap$hw_threads,
-             if (isTRUE(cap$num_procs < cap$hw_threads))
-               "  (CONFINED: cpuset/cgroup)" else ""))
+
+## Only meaningful when OpenMP is present. Without it ompInfoCpp() reports
+## num_procs = 1 by construction -- that is the "kernels run serially" signal,
+## not a cpuset restriction -- so comparing it against the hardware count would
+## announce a confinement that does not exist. Which it did, on the Mac.
+if (isTRUE(cap$openmp)) {
+  check("OpenMP procs / hardware", TRUE,
+        paste0(cap$num_procs, " / ", cap$hw_threads,
+               if (isTRUE(cap$num_procs < cap$hw_threads))
+                 "  (CONFINED: cpuset/cgroup)" else ""))
+} else {
+  check("OpenMP procs / hardware", TRUE,
+        paste0("n/a without OpenMP; hardware reports ", cap$hw_threads,
+               " threads"))
+}
+
 check("peak RSS (VmHWM)", cap$has_vmhwm,
       if (cap$has_vmhwm) "" else "Linux only; memory table unavailable",
       required = FALSE)
@@ -102,12 +123,23 @@ cat("\n== packages ==\n")
 pkgs <- c("sparseDist", "Matrix",
           "proxyC", "text2vec", "coop", "parallelDist", "philentropy",
           "BiocNeighbors", "bluster", "dbscan",
-          "processx", "RhpcBLASctl", "digest", "jsonlite")
+          "processx", "RhpcBLASctl", "digest", "jsonlite",
+          "igraph", "irlba")
 for (p in pkgs) {
   have <- requireNamespace(p, quietly = TRUE)
   check(p, have,
         if (have) as.character(utils::packageVersion(p)) else "NOT INSTALLED")
 }
+
+cat("\n== child process ==\n")
+## The parent finding a package proves nothing about the children: they launch
+## with --vanilla and their own environment. thread_env() propagates
+## .libPaths(), and this is the assertion that it actually works -- the exact
+## failure that made the first api-dump report every package as absent.
+check("child subprocess can load packages",
+      tryCatch(child_can_load(c("sparseDist", "proxyC")),
+               error = function(e) FALSE),
+      "launches Rscript --vanilla and requires sparseDist + proxyC")
 
 cat("\n== smoke test ==\n")
 smoke <- tryCatch({
@@ -226,9 +258,6 @@ check("cell ids canonicalise absent vs NA",
                                               variant = NA_character_)))),
         error = function(e) FALSE))
 
-## new_cell_spec() normalises optional fields to NA so adapters never receive
-## NULL -- which is what makes "absent and NA are the same cell" safe rather
-## than merely conventional.
 check("new_cell_spec normalises optional fields",
       tryCatch({
         s <- new_cell_spec(run_id = "r", experiment = "pairwise",
@@ -253,6 +282,23 @@ check("dry_run rows cannot carry measurements",
                                     status = "dry_run", peak_rss_total_mb = 12))
         FALSE
       }, error = function(e) grepl("dry_run", conditionMessage(e))))
+
+cat("\n== adapters ==\n")
+## Every declared adapter must at least CONSTRUCT. A typo in a switch() or a
+## missing package function would otherwise surface once per cell at run time.
+bad <- character()
+for (i in seq_len(nrow(ADAPTER_TABLE))) {
+  r <- ADAPTER_TABLE[i, ]
+  ok <- tryCatch({
+    get_adapter(r$package, r$experiment, r$method,
+                list(threads = 1L, k = 20L, block_size = 256L, variant = NA))
+    TRUE
+  }, error = function(e) FALSE)
+  if (!ok) bad <- c(bad, paste0(r$package, "/", r$experiment, "/", r$method))
+}
+check("all declared adapters construct", length(bad) == 0,
+      if (length(bad)) paste(bad, collapse = ", ")
+      else paste(nrow(ADAPTER_TABLE), "adapters"))
 
 ## --- verdict ---------------------------------------------------------------
 if (length(warnings_)) {

@@ -33,7 +33,8 @@ base_row <- function(...) {
   new_result_row(
     run_id     = spec$run_id,      cell_id    = spec$cell_id,
     timestamp  = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"),
-    experiment = spec$experiment,  package    = spec$package,
+    experiment = spec$experiment,  panel      = spec$panel,
+    package    = spec$package,
     method     = spec$method,      variant    = spec$variant,
     dataset_id = spec$dataset_id,  k          = spec$k,
     block_size = spec$block_size,

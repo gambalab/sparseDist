@@ -154,19 +154,29 @@ read_10x <- function(key) {
 parse_dataset_id <- function(id) {
   if (grepl("^syn-", id)) {
     m <- regmatches(id, regexec(
-      "^syn-n([0-9]+)-p([0-9]+)-d([0-9.]+)-(nonneg|signed)$", id))[[1]]
+      "^syn-n([0-9]+)-p([0-9]+)-d([0-9.]+)-(nonneg|signed|simplex)$",
+      id))[[1]]
     if (!length(m)) {
       stop("malformed synthetic id '", id, "'; expected ",
-           "syn-n<obs>-p<features>-d<density>-<nonneg|signed>", call. = FALSE)
+           "syn-n<obs>-p<features>-d<density>-<nonneg|signed|simplex>",
+           call. = FALSE)
     }
     return(list(kind = "syn", n_cols = as.integer(m[2]),
                 n_rows = as.integer(m[3]), density = as.numeric(m[4]),
-                signed = identical(m[5], "signed")))
+                sign = m[5], signed = identical(m[5], "signed"),
+                simplex = identical(m[5], "simplex")))
   }
   m <- regmatches(id, regexec(
-    "^pbmc-(rna|atac)-(hvg|simplex|pca50|bin)-n([0-9]+)$", id))[[1]]
+    "^pbmc-(rna|atac)-(hvg|simplex|pca[0-9]+|bin)-n([0-9]+)$", id))[[1]]
   if (!length(m)) stop("unrecognised dataset id '", id, "'", call. = FALSE)
-  list(kind = "real", assay = m[2], form = m[3], n_cols = as.integer(m[4]))
+  ## pca<N> carries its own dimensionality, which is what makes a controlled
+  ## dimension sweep possible on real data with real cluster structure --
+  ## synthetic uniform noise would be pathological for graph-based ANN and
+  ## would overstate the effect.
+  npcs <- if (grepl("^pca", m[3])) as.integer(sub("^pca", "", m[3])) else NA_integer_
+  list(kind = "real", assay = m[2], form = m[3],
+       is_pca = grepl("^pca", m[3]), npcs = npcs,
+       n_cols = as.integer(m[4]))
 }
 
 ## --- builders ---------------------------------------------------------------
@@ -187,6 +197,18 @@ build_synthetic <- function(id, spec) {
   ## non-negative input.
   if (!spec$signed) X <- abs(X)
   X <- methods::as(methods::as(X, "generalMatrix"), "CsparseMatrix")
+
+  if (isTRUE(spec$simplex)) {
+    ## Columns rescaled to relative frequencies -- the same operation the real
+    ## simplex dataset performs on counts, and the only valid input for
+    ## Jensen-Shannon. Kept SPARSE: normalising does not fill in zeros, and
+    ## storing it dense would hide our own densification cost (see the note in
+    ## build_real).
+    ls <- Matrix::colSums(X)
+    X <- X[, ls > 0, drop = FALSE]
+    X <- methods::as(X %*% Matrix::Diagonal(x = 1 / Matrix::colSums(X)),
+                     "CsparseMatrix")
+  }
   colnames(X) <- paste0("c", seq_len(ncol(X)))
   X
 }
@@ -252,11 +274,17 @@ build_real <- function(id, spec) {
     X <- X %*% Matrix::Diagonal(x = 1 / Matrix::colSums(X))
     X <- top_variable_rows(methods::as(X, "CsparseMatrix"), 2000L)
     ## Renormalise after feature selection, or the columns no longer sum to 1.
+    ## (Selecting then normalising gives the same matrix; the order only
+    ## matters for which intermediate is materialised.)
     cs <- Matrix::colSums(X); cs[cs == 0] <- 1
-    X <- X %*% Matrix::Diagonal(x = 1 / cs)
-    return(as.matrix(methods::as(X, "CsparseMatrix")))   # JS kernel takes dense
+    ## Returned SPARSE, not dense, even though the js kernel needs a dense
+    ## arma::mat. The sparseDist adapter densifies in prepare(), where the cost
+    ## is measured; storing it dense instead would hide that cost from us AND
+    ## charge proxyC for a dense -> CSC conversion it would never do in
+    ## practice. Exactly the wrong way round.
+    return(methods::as(X %*% Matrix::Diagonal(x = 1 / cs), "CsparseMatrix"))
   }
-  if (identical(spec$form, "pca50")) {
+  if (isTRUE(spec$is_pca)) {
     ## The DENSE case, and deliberately the same biology rather than unrelated
     ## data: it is a fair baseline for parallelDist, it is the input
     ## BiocNeighbors is actually designed for (Seurat and scanpy both cluster
@@ -269,8 +297,13 @@ build_real <- function(id, spec) {
     }
     H <- top_variable_rows(log_normalise(X), 2000L)
     set.seed(id_seed(id))
-    pc <- irlba::irlba(Matrix::t(H), nv = 50L, center = Matrix::rowMeans(H))
-    E <- t(pc$u %*% diag(pc$d))                # 50 x n_cells, dense
+    nv <- spec$npcs
+    if (nv >= min(dim(H))) {
+      stop("dataset '", id, "': ", nv, " components requested but the matrix ",
+           "is ", nrow(H), " x ", ncol(H), call. = FALSE)
+    }
+    pc <- irlba::irlba(Matrix::t(H), nv = nv, center = Matrix::rowMeans(H))
+    E <- t(pc$u %*% diag(pc$d))                # nv x n_cells, dense
     colnames(E) <- colnames(X)
     return(E)
   }
@@ -291,8 +324,11 @@ describe_dataset <- function(id, X) {
     ## Adapters branch on these rather than re-deriving them, so that a
     ## competitor is never handed input it cannot legitimately consume --
     ## Jaccard on non-binary data, or JS on columns that do not sum to 1.
-    binary   = isTRUE(all(X@x == 1)) || (!methods::is(X, "sparseMatrix") &&
-                                         all(X %in% c(0, 1))),
+    ## Sparse and dense need different tests, and the order matters: X@x on a
+    ## base matrix is an ERROR, not a fallback, so evaluating it first would
+    ## make every dense dataset (pca50) fail to load.
+    binary   = if (methods::is(X, "sparseMatrix")) isTRUE(all(X@x == 1))
+               else isTRUE(all(X %in% c(0, 1))),
     simplex  = isTRUE(all(abs(Matrix::colSums(X) - 1) < 1e-8)),
     is_sparse = methods::is(X, "sparseMatrix")
   )
@@ -341,6 +377,18 @@ ids_density_sweep <- function(n_cols = 3000, n_rows = 2000,
 ids_size_ladder <- function(prefix = "pbmc-rna-hvg",
                             n = c(1000, 5000, 20000, 50000, 100000, 200000)) {
   sprintf("%s-n%d", prefix, n)
+}
+
+## Simplex variants of the same sweep, for Jensen-Shannon.
+##
+## Worth running even though our js kernel densifies and is therefore
+## density-INSENSITIVE: proxyC's "jensen" works on CSC and should get faster as
+## density falls, so there is a crossover here that we lose. Measuring it is
+## the point.
+ids_density_sweep_simplex <- function(n_cols = 3000, n_rows = 2000,
+                                      densities = c(0.5, 0.1, 0.05, 0.01,
+                                                    0.005, 0.001)) {
+  ids_density_sweep(n_cols, n_rows, densities, sign = "simplex")
 }
 
 ## Everything the alignment suite needs: small, fast, and covering each

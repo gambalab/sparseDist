@@ -40,6 +40,11 @@ BENCH_SCHEMA <- c(
 
   ## --- what was measured ----------------------------------------------------
   experiment        = "character",
+  ## Which experiment panel this cell belongs to. Several panels share one
+  ## operation -- the density sweep, size ladder and coercion study are all
+  ## "pairwise" -- so without this they are indistinguishable at analysis time.
+  ## Optional, so cells built before it existed still validate.
+  panel             = "character",
   package           = "character",
   pkg_version       = "character",
   method            = "character",

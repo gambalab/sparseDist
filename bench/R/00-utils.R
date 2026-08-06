@@ -33,6 +33,26 @@ atomic_saveRDS <- function(object, path, compress = TRUE) {
   invisible(path)
 }
 
+## Coerce anything to dgCMatrix.
+##
+## The two-step as(as(x, "generalMatrix"), "CsparseMatrix") is the documented
+## route for Matrix 1.5+, but "generalMatrix" is a VIRTUAL class in the Matrix
+## hierarchy: a base matrix has no path to it and the coercion errors. Base
+## matrices must go through Matrix() instead -- and the dense datasets
+## (simplex, pca50) are base matrices.
+as_dgc <- function(X) {
+  if (methods::is(X, "dgCMatrix")) return(X)
+  if (!methods::is(X, "Matrix")) {
+    ## Matrix() AUTO-DETECTS structure: a base matrix that happens to be
+    ## triangular or symmetric comes back as dtCMatrix or dsCMatrix, not
+    ## dgCMatrix. Packages that dispatch on dgCMatrix then reject it -- coop
+    ## fails with "argument 'x' must be numeric" -- so the general coercion
+    ## below is not optional tidying.
+    X <- Matrix::Matrix(X, sparse = TRUE)
+  }
+  methods::as(methods::as(X, "generalMatrix"), "CsparseMatrix")
+}
+
 ## --- scalar predicates -----------------------------------------------------
 
 is_whole_scalar <- function(x, min = 1, max = .Machine$integer.max) {
@@ -83,6 +103,7 @@ canonical_identity <- function(spec) {
   }
 
   list(experiment = chr_or_na(spec$experiment),
+       panel      = chr_or_na(spec$panel),
        package    = chr_or_na(spec$package),
        method     = chr_or_na(spec$method),
        dataset_id = chr_or_na(spec$dataset_id),
@@ -111,8 +132,8 @@ canonical_identity <- function(spec) {
 ##
 ## 128 bits of sha1. Not "collision-proof" -- a truncated hash never is -- but
 ## a collision would overwrite a result, so the margin is worth the length.
-CELL_IDENTITY_FIELDS <- c("experiment", "package", "method", "dataset_id",
-                          "threads", "phase", "rep", "seed", "k",
+CELL_IDENTITY_FIELDS <- c("experiment", "panel", "package", "method",
+                          "dataset_id", "threads", "phase", "rep", "seed", "k",
                           "block_size", "variant")
 
 make_cell_id <- function(spec) {
@@ -153,14 +174,15 @@ SPEC_TEXT_FIELDS <- c("run_id", "cell_id", "experiment", "package", "method",
 new_cell_spec <- function(run_id, experiment, package, method, dataset_id,
                           threads, phase, rep,
                           k = NA, block_size = NA, variant = NA, seed = NA,
-                          ...) {
+                          panel = NA, ...) {
   spec <- list(run_id = run_id, experiment = experiment, package = package,
                method = method, dataset_id = dataset_id,
                threads = threads, phase = phase, rep = rep,
                k          = if (is_absent(k))          NA else k,
                block_size = if (is_absent(block_size)) NA else block_size,
                variant    = if (is_absent(variant))    NA else variant,
-               seed       = if (is_absent(seed))       NA else seed)
+               seed       = if (is_absent(seed))       NA else seed,
+               panel      = if (is_absent(panel))      NA else panel)
   extra <- list(...)
   if (length(extra)) spec[names(extra)] <- extra
 
