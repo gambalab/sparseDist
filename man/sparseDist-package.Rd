@@ -47,11 +47,11 @@ thread writes to disjoint output positions.
 }
 
 \author{
-\strong{Maintainer}: Gennaro Gambardella \email{gambardella@tigem.it} (\href{https://orcid.org/0000-0001-7517-1347}{ORCID})
+\strong{Maintainer}: Gennaro Gambardella \email{gambalab.bioinformatics@gmail.com} (\href{https://orcid.org/0000-0001-7517-1347}{ORCID})
 
 Authors:
 \itemize{
-  \item Gennaro Gambardella \email{gambardella@tigem.it} (\href{https://orcid.org/0000-0001-7517-1347}{ORCID})
+  \item Gennaro Gambardella \email{gambalab.bioinformatics@gmail.com} (\href{https://orcid.org/0000-0001-7517-1347}{ORCID})
 }
 
 }

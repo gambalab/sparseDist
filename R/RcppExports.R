@@ -5,6 +5,10 @@ detectCoresCpp <- function() {
     .Call(`_sparseDist_detectCoresCpp`)
 }
 
+ompInfoCpp <- function() {
+    .Call(`_sparseDist_ompInfoCpp`)
+}
+
 snnJaccard <- function(idx, include_self = TRUE, ncores = 1L, verbose = FALSE) {
     .Call(`_sparseDist_snnJaccard`, idx, include_self, ncores, verbose)
 }

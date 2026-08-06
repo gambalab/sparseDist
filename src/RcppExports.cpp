@@ -21,6 +21,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ompInfoCpp
+Rcpp::List ompInfoCpp();
+RcppExport SEXP _sparseDist_ompInfoCpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(ompInfoCpp());
+    return rcpp_result_gen;
+END_RCPP
+}
 // snnJaccard
 Rcpp::NumericMatrix snnJaccard(const Rcpp::IntegerMatrix& idx, bool include_self, int ncores, bool verbose);
 RcppExport SEXP _sparseDist_snnJaccard(SEXP idxSEXP, SEXP include_selfSEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
@@ -262,6 +272,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_sparseDist_detectCoresCpp", (DL_FUNC) &_sparseDist_detectCoresCpp, 0},
+    {"_sparseDist_ompInfoCpp", (DL_FUNC) &_sparseDist_ompInfoCpp, 0},
     {"_sparseDist_snnJaccard", (DL_FUNC) &_sparseDist_snnJaccard, 4},
     {"_sparseDist_fastCorr", (DL_FUNC) &_sparseDist_fastCorr, 6},
     {"_sparseDist_fastCorr2", (DL_FUNC) &_sparseDist_fastCorr2, 5},
