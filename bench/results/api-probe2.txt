@@ -1,0 +1,278 @@
+
+
+========================================================================
+1. proxyC ROUNDING (digits = 14 is an ACTIVE default)
+========================================================================
+
+--- simil cosine, digits = 14 (default) vs digits = 22, max abs difference
+ max_abs_diff any_different 
+ 4.968248e-15  1.000000e+00 
+
+--- does digits = Inf work?
+[1] 0
+
+--- sparseDist cosine SIMILARITY vs proxyC at digits = 22 (max abs diff)
+[1] 4.440892e-16
+
+
+========================================================================
+2. proxyC DEGENERATE COLUMNS (use_nan)
+========================================================================
+
+--- proxyC cosine on all-zero columns, use_nan = NULL (default)
+   c1 c2 c3
+c1  1  0  0
+c2  0  0  0
+c3  0  0  0
+
+--- proxyC cosine on all-zero columns, use_nan = TRUE
+    c1  c2  c3
+c1   1 NaN NaN
+c2 NaN NaN NaN
+c3 NaN NaN NaN
+
+--- proxyC cosine on all-zero columns, use_nan = FALSE
+   c1 c2 c3
+c1  1  0  0
+c2  0  0  0
+c3  0  0  0
+
+--- sparseDist cosine similarity on the same input (reference)
+   c1 c2 c3
+c1  1  0  0
+c2  0  1  1
+c3  0  1  1
+
+--- proxyC jaccard on all-zero columns, use_nan = FALSE
+   c1 c2 c3
+c1  1  0  0
+c2  0  0  0
+c3  0  0  0
+
+--- sparseDist binary distance on the same input (reference)
+   c1 c2 c3
+c1  0  1  1
+c2  1  0  0
+c3  1  0  0
+
+
+========================================================================
+3. proxyC 'jensen' -- an unplanned second JS comparator
+========================================================================
+
+--- sparseDist js (reference)
+          p1        p2        p3
+p1 0.0000000 0.2577097 0.4419396
+p2 0.2577097 0.0000000 0.2283025
+p3 0.4419396 0.2283025 0.0000000
+
+--- proxyC dist method = 'jensen', margin = 2
+           p1         p2         p3
+p1 0.00000000 0.06641431 0.19531058
+p2 0.06641431 0.00000000 0.05212204
+p3 0.19531058 0.05212204 0.00000000
+
+--- ratio and square-ratio vs ours (identifies sqrt / log base)
+$theirs_over_ours
+[1] 0.2577097
+
+$theirs_over_ours_sq
+[1] 1
+
+$sqrt_theirs_over_ours
+[1] 1
+
+
+
+========================================================================
+4. text2vec + Matrix 1.7.5 -- is the symmetric path broken?
+========================================================================
+
+--- sim2(x) jaccard -- symmetric path
+WARN  [13:28:32.938] l2 norm provided. Howewer matrix will be converted to binary (0,1) automatically. 'jaccard' can be computed only on sets which should be encoded as sparse matrices of 0, 1.
+[1] "ERROR: error in evaluating the argument 'x' in selecting a method for function 'as.matrix': no method or default for coercing “dsTMatrix” to “dgCMatrix”"
+
+--- sim2(x, x) jaccard -- explicit y
+WARN  [13:28:32.990] l2 norm provided. Howewer matrix will be converted to binary (0,1) automatically. 'jaccard' can be computed only on sets which should be encoded as sparse matrices of 0, 1.
+'as(<dgTMatrix>, "dgCMatrix")' is deprecated.
+Use 'as(., "CsparseMatrix")' instead.
+See help("Deprecated") and help("Matrix-deprecated").
+          c1        c2
+c1 1.0000000 0.3333333
+c2 0.3333333 1.0000000
+
+--- sim2(x) cosine -- is cosine affected too?
+    c1  c2
+c1 1.0 0.5
+c2 0.5 1.0
+
+--- sim2(x, x) cosine
+    c1  c2
+c1 1.0 0.5
+c2 0.5 1.0
+
+--- dist2(x, x) jaccard
+WARN  [13:28:33.011] Sparsity will be lost - worth to calculate similarity instead of distance.
+WARN  [13:28:33.012] l2 norm provided. Howewer matrix will be converted to binary (0,1) automatically. 'jaccard' can be computed only on sets which should be encoded as sparse matrices of 0, 1.
+          c1        c2
+c1 0.0000000 0.6666667
+c2 0.6666667 0.0000000
+
+--- class returned by sim2(x) cosine (unconverted)
+[1] "dsCMatrix"
+attr(,"package")
+[1] "Matrix"
+
+
+========================================================================
+5. bluster SNN -- 31 edges (ours) vs 66 (theirs)
+========================================================================
+
+--- elementwise comparison of full adjacency matrices
+$ours_nonzero
+[1] 31
+
+$theirs_edges
+[1] 66
+
+$theirs_nonzero
+[1] 66
+
+$theirs_zero_weight_edges
+[1] 0
+
+$max_abs_diff
+[1] 0.4285714
+
+$n_disagreeing_cells
+[1] 70
+
+$ours_diag
+ c1  c2  c3  c4  c5  c6  c7  c8  c9 c10 c11 c12 
+  0   0   0   0   0   0   0   0   0   0   0   0 
+
+$theirs_diag
+ c1  c2  c3  c4  c5  c6  c7  c8  c9 c10 c11 c12 
+  0   0   0   0   0   0   0   0   0   0   0   0 
+
+
+--- first rows side by side (ours on top)
+       c1     c2     c3   c4     c5   c6     c7   c8     c9    c10  c11  c12
+ours    0 0.4286 0.0000 0.00 0.1111 0.00 0.0000 0.00 0.4286 0.0000 0.25 0.25
+theirs  0 0.4286 0.1111 0.25 0.1111 0.25 0.4286 0.25 0.4286 0.4286 0.25 0.25
+
+--- ours with symmetrise = FALSE, row 1 (is bluster using pmax?)
+    c1     c2     c3     c4     c5     c6     c7     c8     c9    c10    c11 
+0.0000 0.4286 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.4286 0.0000 0.2500 
+   c12 
+0.2500 
+
+
+========================================================================
+6. BiocNeighbors -- does it densify sparse input?
+========================================================================
+
+--- findKNN on a dgCMatrix (transposed: obs in rows)
+$names
+[1] "index"    "distance"
+
+$idx_dim
+[1] 30  5
+
+$first_row
+[1] 21 30 25  3 17
+
+
+--- findKNN on a base dense matrix -- same answer?
+$identical_indices
+[1] TRUE
+
+$max_dist_diff
+[1] 0
+
+
+--- ExhaustiveParam Cosine backend available?
+[1] 21 26 25  9  6
+
+--- sparseDist cosine kNN on the same data (tie / ordering convention)
+[1] 21 26 25  9  6
+
+
+========================================================================
+7. coop -- pearson is named pcor; sparse support?
+========================================================================
+
+--- does coop::pcor exist, and with what signature?
+function (x, y, use = "everything", inplace = FALSE, inverse = FALSE) 
+NULL
+
+--- coop exported objects
+ [1] "CO_ORR"                         "CO_SIM"                        
+ [3] "CO_VAR"                         "R_check_badvals"               
+ [5] "R_co_mat"                       "R_co_mat_pairwise"             
+ [7] "R_co_sparse"                    "R_co_vecvec"                   
+ [9] "R_csc_to_coo"                   "R_fast_naomit"                 
+[11] "R_naomit_vecvec"                "R_scaler"                      
+[13] "R_sparsity_dbl"                 "R_sparsity_int"                
+[15] "check.is.flag"                  "check_badvals"                 
+[17] "check_use"                      "co_matrix"                     
+[19] "co_sparse"                      "co_vecvec"                     
+[21] "co_wt"                          "co_wt.data.frame"              
+[23] "cosine"                         "cosine.data.frame"             
+[25] "cosine.default"                 "cosine.dgCMatrix"              
+[27] "cosine.matrix"                  "cosine.simple_triplet_matrix"  
+[29] "cosine_wt"                      "cosine_wt.data.frame"          
+[31] "cosine_wt.matrix"               "covar"                         
+[33] "covar.data.frame"               "covar.default"                 
+[35] "covar.matrix"                   "covar_wt"                      
+[37] "covar_wt.data.frame"            "covar_wt.matrix"               
+[39] "csc_to_coo"                     "dense_stored_sparse_mat"       
+[41] "is.vec"                         "maxcovar"                      
+[43] "naomit"                         "naomit_mat"                    
+[45] "pcor"                           "pcor.data.frame"               
+[47] "pcor.default"                   "pcor.matrix"                   
+[49] "pcor_wt"                        "pcor_wt.data.frame"            
+[51] "pcor_wt.matrix"                 "scaler"                        
+[53] "sparsity"                       "sparsity.matrix"               
+[55] "sparsity.simple_triplet_matrix" "tcosine"                       
+[57] "tcosine.data.frame"             "tcosine.matrix"                
+[59] "tcovar"                         "tcovar.data.frame"             
+[61] "tcovar.matrix"                  "tpcor"                         
+[63] "tpcor.data.frame"               "tpcor.matrix"                  
+
+--- coop::cosine accepts dgCMatrix directly?
+$class
+[1] "matrix" "array" 
+
+$dim
+[1] 30 30
+
+$corner
+         c1       c2       c3
+c1 1.000000 0.148768 0.204503
+c2 0.148768 1.000000 0.202411
+c3 0.204503 0.202411 1.000000
+
+
+--- coop::cosine vs sparseDist cosine similarity (max abs diff)
+[1] 1.665335e-16
+
+
+========================================================================
+8. parallelDist -- dense baseline, methods and orientation
+========================================================================
+
+--- available methods
+[1] "'getDistMethods' is not an exported object from 'namespace:parallelDist'"
+
+--- parDist euclidean vs sparseDist euclidean (max abs diff, obs in rows)
+[1] 5.329071e-15
+
+--- dist object size vs our dense matrix, same data
+              parDist_mb sparseDist_full_FALSE_mb 
+             0.007606506              0.010993958 
+
+
+========================================================================
+END
+========================================================================
