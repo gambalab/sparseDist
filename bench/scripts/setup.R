@@ -82,9 +82,31 @@ if (getRversion() < VERIFIED_R) {
 ## also serves precompiled binaries -- the difference between minutes and hours
 ## on a cold cluster node. macOS falls back to the source snapshot, which is
 ## fine because the Mac install happens once and is not on the critical path.
+## Is this R the one inside the active conda environment?
+is_conda_r <- function() {
+  cp <- Sys.getenv("CONDA_PREFIX", unset = "")
+  if (!nzchar(cp)) return(FALSE)
+  rh <- tryCatch(normalizePath(R.home(), mustWork = FALSE),
+                 error = function(e) "")
+  cp <- tryCatch(normalizePath(cp, mustWork = FALSE), error = function(e) "")
+  nzchar(rh) && nzchar(cp) && startsWith(rh, cp)
+}
+
 ppm_repo <- function(snapshot) {
   base <- paste0("https://packagemanager.posit.co/cran/", snapshot)
   if (Sys.info()[["sysname"]] != "Linux") return(base)
+
+  ## PPM's Linux binaries are compiled against the DISTRO's R and toolchain.
+  ## Installed into a conda R they frequently load with undefined-symbol
+  ## errors, or silently link against the wrong libstdc++/BLAS -- which for a
+  ## benchmark would be far worse than slow. Conda builds from source.
+  if (is_conda_r()) {
+    say("Conda R detected (%s); using the SOURCE snapshot. Binaries built for",
+        R.home())
+    say("      the system R are not ABI-compatible with it. Expect a long")
+    say("      first install; it is a one-off.")
+    return(base)
+  }
   os <- tryCatch({
     rel <- readLines("/etc/os-release", warn = FALSE)
     get1 <- function(key) {
@@ -244,6 +266,21 @@ for (p in all_pkgs) {
     paste0("NOT IN ", basename(LIB), " (", other, " found elsewhere)")
   } else "NOT INSTALLED"
   line(p, here, detail)
+}
+
+## BLAS threading. arma::cor sits under pearson and covariance, so a threaded
+## BLAS is not a detail: conda-forge R links OpenBLAS by default, which will
+## happily use every core and contaminate the single-thread column unless
+## RhpcBLASctl pins it. thread_env() sets the environment variables and run.R
+## calls blas_set_num_threads(1); this reports what the BLAS thinks it has, so
+## a threaded one is known about rather than discovered from a bad scaling
+## curve.
+if (in_lib("RhpcBLASctl")) {
+  nb <- tryCatch(RhpcBLASctl::blas_get_num_procs(), error = function(e) NA)
+  line("BLAS threads available", TRUE,
+       if (is.na(nb)) "unknown"
+       else if (nb > 1) paste0(nb, "  (THREADED: pinning is load-bearing)")
+       else "1 (single-threaded)")
 }
 
 omp <- tryCatch(sparseDist:::ompInfoCpp(), error = function(e) NULL)
