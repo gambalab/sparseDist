@@ -1,0 +1,94 @@
+# ---------------------------------------------------------------------------
+# environment.yml -- the R toolchain the benchmark runs on.
+#
+#   mamba env create -f bench/environment.yml
+#   conda activate sparsedist
+#   export LC_ALL=C.UTF-8
+#   export BENCH_LIB=$PWD/../sparseDist-bench-lib-linux
+#   Rscript bench/scripts/setup.R --lib=$BENCH_LIB
+#
+# WHAT THIS PINS, AND WHAT IT DOES NOT
+#
+# This file pins the INTERPRETER AND TOOLCHAIN: R itself, the compilers, and
+# the system libraries the R packages link against. It deliberately does NOT
+# install any R package. Those are pinned separately, by the dated CRAN
+# snapshot and Bioconductor release in setup.R, and installed into a private
+# library ($BENCH_LIB).
+#
+# Two pinning mechanisms rather than one, because they answer different
+# questions: conda fixes what the packages are BUILT against, the snapshot
+# fixes which package versions. Installing r-* packages from conda as well
+# would put a second copy of Matrix and Rcpp on the search path, and the
+# resulting shadowing is exactly the failure this setup already hit once on the
+# cluster's system R.
+#
+# WHY CONDA AT ALL. The cluster's system R was 4.2, which pins Bioconductor
+# 3.16 and therefore BiocNeighbors 1.x -- a different major line from the 2.6.0
+# the adapters were written and verified against. Rather than rewrite the
+# comparison for a four-year-old stack, the environment travels with the
+# analysis.
+#
+# NOTE ON THE R VERSION. 4.6.1 matches the machine where every competitor API
+# was probed and recorded (bench/results/api-dump.txt, api-probe2.txt). Change
+# it and those recorded semantics need re-checking -- align.R is the test.
+#
+# NOTE ON BLAS. conda-forge's R links a THREADED OpenBLAS, unlike the reference
+# libRblas on macOS. arma::cor sits under the pearson and covariance kernels,
+# so BLAS threads would otherwise leak into the nominally single-threaded
+# column: thread_env() pins them through the environment and run.R calls
+# RhpcBLASctl::blas_set_num_threads(1). setup.R reports the thread count so a
+# threaded BLAS is known about rather than discovered from a strange scaling
+# curve. For a deterministic single-threaded reference instead, replace the
+# libblas line with:  - libblas=*=*netlib
+#
+# FOR A RELEASE ARTEFACT, resolve this to exact builds:
+#   conda-lock lock -f bench/environment.yml -p linux-64
+# and ship the lock file alongside. This file fixes versions; the lock file
+# fixes builds.
+# ---------------------------------------------------------------------------
+name: sparsedist
+
+channels:
+  - conda-forge
+  - nodefaults
+
+dependencies:
+  # --- interpreter ---------------------------------------------------------
+  - r-base=4.6.1
+
+  # --- toolchain -----------------------------------------------------------
+  # conda's r-base does NOT pull a compiler, and every R package here is
+  # installed from source (PPM's Linux binaries are built against the distro R
+  # and are not ABI-compatible with a conda R). `compilers` brings gcc, g++ and
+  # gfortran; gfortran is required by RcppArmadillo's LAPACK linkage.
+  - compilers
+  - make
+  - cmake            # RcppParallel's bundled TBB
+  - pkg-config
+  - git              # run.R derives run_id from the commit sha
+
+  # --- linear algebra ------------------------------------------------------
+  # Explicit so the implementation is a recorded choice rather than whatever
+  # the solver happened to pick.
+  - libblas=*=*openblas
+  - liblapack=*=*openblas
+  - openblas
+
+  # --- libraries the R packages link against -------------------------------
+  - libcurl          # remotes, download.file for the 10x matrices
+  - openssl
+  - libxml2          # xml2, igraph
+  - glpk             # igraph
+  - gmp              # igraph
+  - zlib             # readMM on .mtx.gz
+  - bzip2
+  - xz
+  - libpng           # ggplot2 devices
+  - freetype
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY ABSENT: r-matrix, r-rcpp, r-biocmanager and friends. Every R
+# package comes from setup.R, into $BENCH_LIB, at the pinned snapshot. Mixing
+# the two sources produces duplicate namespaces on the search path and a
+# benchmark whose dependency versions nobody can state.
+# ---------------------------------------------------------------------------
