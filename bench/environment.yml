@@ -61,6 +61,11 @@ dependencies:
   # installed from source (PPM's Linux binaries are built against the distro R
   # and are not ABI-compatible with a conda R). `compilers` brings gcc, g++ and
   # gfortran; gfortran is required by RcppArmadillo's LAPACK linkage.
+  #
+  # $CONDA_PREFIX/bin must come FIRST on PATH when building these from source,
+  # or configure scripts find /usr/bin/xml2-config and friends and mix system
+  # headers with conda link paths. `conda activate` arranges that; a bare
+  # Rscript from an unactivated login shell does not.
   - compilers
   - make
   - cmake            # RcppParallel's bundled TBB
@@ -77,7 +82,16 @@ dependencies:
   # --- libraries the R packages link against -------------------------------
   - libcurl          # remotes, download.file for the 10x matrices
   - openssl
-  - libxml2          # xml2, igraph
+  # libxml2-devel, NOT libxml2. conda-forge splits the two: the runtime package
+  # ships only libxml2.so.16 and no bare libxml2.so, and no xml2-config -- so
+  # igraph's configure falls back to /usr/bin/xml2-config, compiles against
+  # SYSTEM headers, and then emits -lxml2 that conda's linker (which searches
+  # only $CONDA_PREFIX/lib) cannot resolve:
+  #     ld: cannot find -lxml2
+  # The devel package provides both the .so symlink and its own xml2-config.
+  # Note --disable-graphml does NOT avoid this: igraph detects libxml2 through
+  # xml2-config regardless of that flag.
+  - libxml2-devel    # xml2, igraph  (see note above)
   - glpk             # igraph
   - gmp              # igraph
   - zlib             # readMM on .mtx.gz
