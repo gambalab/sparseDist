@@ -9,6 +9,7 @@ sparseSNN(
   include_self = TRUE,
   prune = 0,
   symmetrise = TRUE,
+  edges = c("knn", "shared"),
   ncores = 1,
   verbose = TRUE
 )
@@ -33,16 +34,25 @@ in a row of \code{idx} is removed when \code{FALSE}, so the result does
 not depend on the \code{include_self} used when the neighbours were
 found. Note that it changes only the sets used to compute the weights; it
 does not add or remove diagonal edges. A self-loop appears only when a row
-of \code{idx} actually lists its own index.}
+of \code{idx} actually lists its own index, which cannot happen when
+\code{edges = "shared"}.}
 
 \item{prune}{Numeric in \code{[0, 1]}; edges with a weight at or below this
 value are dropped. The default \code{0} removes only pairs with no shared
 neighbours at all. Raising it thins the graph before clustering, and
-\code{1} yields an empty graph since the test is strict.}
+\code{1} yields an empty graph since the test is strict. With
+\code{edges = "shared"} the test is applied inside the kernel, so pruned
+edges are never materialised -- raising \code{prune} genuinely lowers peak
+memory rather than only shrinking the result.}
 
 \item{symmetrise}{Logical; if \code{TRUE} (the default) the result is made
 undirected by keeping the larger of \code{w[i, j]} and \code{w[j, i]}.
-Set to \code{FALSE} to keep the directed graph.}
+Set to \code{FALSE} to keep the directed graph. Ignored when
+\code{edges = "shared"}, whose edge set is symmetric by construction; a
+warning is issued if it is explicitly set to \code{FALSE}.}
+
+\item{edges}{Either \code{"knn"} (the default) or \code{"shared"}; see
+Details.}
 
 \item{ncores}{Number of threads. Defaults to 1.}
 
@@ -55,10 +65,8 @@ non-zero entries are the retained edge weights, carrying the row names of
 }
 \description{
 Reweights a k-nearest-neighbour graph by neighbourhood overlap. The weight of
-the edge from \code{i} to \code{j} is the Jaccard coefficient between the two
-neighbour sets,
-\code{|N(i) intersect N(j)| / |N(i) union N(j)|}, computed for every
-\code{j} listed among the neighbours of \code{i}.
+the edge between \code{i} and \code{j} is the Jaccard coefficient between the
+two neighbour sets, \code{|N(i) intersect N(j)| / |N(i) union N(j)|}.
 }
 \details{
 This is the second stage of graph-based clustering: build a kNN graph with
@@ -68,11 +76,50 @@ weighting suppresses edges between points that happen to be close but sit in
 different neighbourhoods, which makes the community structure much clearer
 than raw distances.
 
-The graph is \strong{directed}, because \code{j} being a neighbour of
-\code{i} does not make \code{i} a neighbour of \code{j}. The weights
-themselves are symmetric -- the Jaccard coefficient does not depend on
-direction -- so \code{w[i, j]} and \code{w[j, i]} agree wherever both edges
-exist. Use \code{symmetrise} to obtain an undirected graph.
+\code{edges} selects which pairs receive a weight, and the two settings give
+genuinely different graphs:
+
+\describe{
+\item{\code{"knn"}}{(default) a weight for every \code{j} listed among the
+neighbours of \code{i}. The edge set is the kNN graph itself.}
+\item{\code{"shared"}}{a weight for every pair sharing at least one
+neighbour, whether or not they are kNN-adjacent. This is the convention
+used by \pkg{Seurat} and by \code{bluster::neighborsToSNNGraph(type =
+    "jaccard")}.}
+}
+
+The retained OFF-DIAGONAL edges from \code{"knn"} form a subset of those
+from \code{"shared"} -- usually a proper and substantially sparser subset,
+though the two coincide on sufficiently small or dense neighbourhood systems
+-- and wherever both emit an edge the weights are identical; only the edge
+set differs. If \code{idx} explicitly contains self indices, \code{"knn"} may
+additionally carry diagonal self-loops; \code{"shared"} emits only
+\code{j > i} and so never produces a diagonal edge. Two points can share a
+neighbour
+without either appearing in the other's neighbour list, and \code{"shared"}
+keeps such a pair while \code{"knn"} does not. \code{"shared"} is therefore
+denser, on the order of \code{k} times as many edges, which costs both memory
+and downstream clustering time. \code{"knn"} is cheaper and may yield sharper
+communities; the effect on clustering should be assessed for the application.
+Use \code{"shared"} when results must line up with a \pkg{Seurat} or
+\pkg{bluster} pipeline, and raise \code{prune} to keep the graph manageable.
+
+Agreement with \code{bluster::neighborsToSNNGraph(type = "jaccard")} is
+exact, given a \code{sparseKNN} search run with \code{include_self = FALSE}
+and \code{include_self = TRUE} here. \pkg{Seurat} instead computes
+\code{overlap / (2k - overlap)}, which coincides with the true union only
+when every neighbour set holds exactly \code{k} members; results therefore
+match for regular fixed-size neighbourhoods with aligned self conventions,
+but can differ where rows carry padding, duplicates, or differing effective
+sizes. The formula used here is the correct one in those cases.
+
+With \code{edges = "knn"} the graph is \strong{directed}, because \code{j}
+being a neighbour of \code{i} does not make \code{i} a neighbour of \code{j}.
+The weights themselves are symmetric -- the Jaccard coefficient does not
+depend on direction -- so \code{w[i, j]} and \code{w[j, i]} agree wherever
+both edges exist. Use \code{symmetrise} to obtain an undirected graph. With
+\code{edges = "shared"} the edge set is symmetric by construction, so the
+result is always undirected and \code{symmetrise} does not apply.
 }
 \examples{
 set.seed(1)
@@ -85,6 +132,10 @@ snn[1:5, 1:5]
 
 # thin the graph before clustering
 snn <- sparseSNN(nn, prune = 1 / 15, ncores = 1, verbose = FALSE)
+
+# Seurat / bluster convention: every pair sharing a neighbour
+snn_shared <- sparseSNN(nn, edges = "shared", ncores = 1, verbose = FALSE)
+Matrix::nnzero(snn_shared) >= Matrix::nnzero(snn)
 
 }
 \seealso{

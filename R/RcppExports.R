@@ -13,6 +13,10 @@ snnJaccard <- function(idx, include_self = TRUE, ncores = 1L, verbose = FALSE) {
     .Call(`_sparseDist_snnJaccard`, idx, include_self, ncores, verbose)
 }
 
+snnJaccardShared <- function(idx, include_self = TRUE, prune = 0.0, ncores = 1L, verbose = FALSE) {
+    .Call(`_sparseDist_snnJaccardShared`, idx, include_self, prune, ncores, verbose)
+}
+
 fastCorr <- function(m, ncores = 1L, verbose = TRUE, full = FALSE, diag = TRUE, dist = TRUE) {
     .Call(`_sparseDist_fastCorr`, m, ncores, verbose, full, diag, dist)
 }

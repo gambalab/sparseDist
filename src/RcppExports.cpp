@@ -45,6 +45,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// snnJaccardShared
+Rcpp::List snnJaccardShared(const Rcpp::IntegerMatrix& idx, bool include_self, double prune, int ncores, bool verbose);
+RcppExport SEXP _sparseDist_snnJaccardShared(SEXP idxSEXP, SEXP include_selfSEXP, SEXP pruneSEXP, SEXP ncoresSEXP, SEXP verboseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerMatrix& >::type idx(idxSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_self(include_selfSEXP);
+    Rcpp::traits::input_parameter< double >::type prune(pruneSEXP);
+    Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    rcpp_result_gen = Rcpp::wrap(snnJaccardShared(idx, include_self, prune, ncores, verbose));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fastCorr
 SEXP fastCorr(const arma::sp_mat& m, int ncores, bool verbose, bool full, bool diag, bool dist);
 RcppExport SEXP _sparseDist_fastCorr(SEXP mSEXP, SEXP ncoresSEXP, SEXP verboseSEXP, SEXP fullSEXP, SEXP diagSEXP, SEXP distSEXP) {
@@ -274,6 +289,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_sparseDist_detectCoresCpp", (DL_FUNC) &_sparseDist_detectCoresCpp, 0},
     {"_sparseDist_ompInfoCpp", (DL_FUNC) &_sparseDist_ompInfoCpp, 0},
     {"_sparseDist_snnJaccard", (DL_FUNC) &_sparseDist_snnJaccard, 4},
+    {"_sparseDist_snnJaccardShared", (DL_FUNC) &_sparseDist_snnJaccardShared, 5},
     {"_sparseDist_fastCorr", (DL_FUNC) &_sparseDist_fastCorr, 6},
     {"_sparseDist_fastCorr2", (DL_FUNC) &_sparseDist_fastCorr2, 5},
     {"_sparseDist_fastCov", (DL_FUNC) &_sparseDist_fastCov, 5},
