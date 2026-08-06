@@ -28,7 +28,13 @@
 CRAN_SNAPSHOT <- "2026-08-01"        # <-- set to the date you first install
 BIOC_VERSION  <- NULL                 # NULL = whatever matches this R; else e.g. "3.21"
 
-MIN_R <- "4.0.0"
+## The adapter layer was written and verified against R 4.6.1 with
+## BiocNeighbors 2.6.0, Matrix 1.7.5 and proxyC 0.5.2. R 4.2 pins Bioconductor
+## 3.16, whose BiocNeighbors is the 1.x line with a DIFFERENT API, and ships a
+## Matrix predating the generalMatrix coercion path as_dgc() relies on. A run
+## on that stack would not be the benchmark we verified.
+MIN_R      <- "4.4.0"
+VERIFIED_R <- "4.6.1"
 
 args    <- commandArgs(trailingOnly = TRUE)
 lib_arg <- grep("^--lib=", args, value = TRUE)
@@ -53,7 +59,23 @@ say  <- function(...) cat(sprintf(...), "\n", sep = "")
 line <- function(label, ok, detail = "")
   cat(sprintf("  %-34s %-6s %s\n", label, if (ok) "PASS" else "FAIL", detail))
 
-if (getRversion() < MIN_R) stop("R >= ", MIN_R, " required; found ", getRversion())
+if (getRversion() < MIN_R && !nzchar(Sys.getenv("BENCH_ALLOW_OLD_R"))) {
+  stop("R >= ", MIN_R, " is required; this is ", getRversion(), ".\n",
+       "The competitor APIs were verified on R ", VERIFIED_R, ". On an older ",
+       "R, BiocManager pins an older Bioconductor and BiocNeighbors resolves ",
+       "to the 1.x line, whose findKNN() signature differs from the 2.x one ",
+       "the adapters are written against.\n",
+       "Load a newer R module, or build one (conda/mamba), before running ",
+       "this. Set BENCH_ALLOW_OLD_R=1 to override -- but then re-run ",
+       "api-dump.R, api-probe2.R and align.R on THIS stack, because none of ",
+       "the recorded semantics can be assumed to hold.",
+       call. = FALSE)
+}
+if (getRversion() < VERIFIED_R) {
+  say("NOTE: R %s here vs %s where the APIs were verified. Check align.R ",
+      as.character(getRversion()), VERIFIED_R)
+  say("      passes on this machine before trusting any result.")
+}
 
 ## --- repository ------------------------------------------------------------
 ## Posit Package Manager serves dated snapshots, and on supported Linux distros
@@ -121,7 +143,20 @@ cran_pkgs <- c(
   "remotes", "testthat", "BiocManager"
 )
 
-need <- cran_pkgs[!vapply(cran_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+## Presence must be checked IN THE PINNED LIBRARY, not anywhere on the search
+## path.
+##
+## requireNamespace() searches every .libPaths() entry, so an old copy in the
+## system library counts as "already present" and nothing gets installed --
+## which silently defeats the whole point of a pinned snapshot. It bit us on
+## the cluster: a stale BiocManager in the system library reported Bioconductor
+## 3.12 and the install failed with a version error that looked like a
+## Bioconductor problem rather than a library-path one.
+in_lib <- function(p) {
+  length(find.package(p, lib.loc = LIB, quiet = TRUE)) > 0L
+}
+
+need <- cran_pkgs[!vapply(cran_pkgs, in_lib, logical(1))]
 if (length(need)) {
   say("Installing %d CRAN package(s): %s", length(need), paste(need, collapse = ", "))
   install.packages(need, lib = LIB)
@@ -135,13 +170,19 @@ if (length(need)) {
 bioc_pkgs <- c("BiocNeighbors",   # exact + approximate kNN
                "bluster")         # neighborsToSNNGraph(type = "jaccard")
 
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  stop("BiocManager failed to install; cannot continue.")
+if (!in_lib("BiocManager")) {
+  stop("BiocManager did not install into ", LIB, "; cannot continue.")
 }
+## Drop any already-loaded (system) BiocManager so the freshly installed one is
+## used. Otherwise version() still answers from the stale copy.
+if ("BiocManager" %in% loadedNamespaces()) {
+  try(unloadNamespace("BiocManager"), silent = TRUE)
+}
+loadNamespace("BiocManager", lib.loc = LIB)
 bioc_ver <- if (is.null(BIOC_VERSION)) BiocManager::version() else BIOC_VERSION
 say("Bioconductor release: %s", as.character(bioc_ver))
 
-need_bioc <- bioc_pkgs[!vapply(bioc_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+need_bioc <- bioc_pkgs[!vapply(bioc_pkgs, in_lib, logical(1))]
 if (length(need_bioc)) {
   ## BiocManager wants its own repo set; restore ours afterwards so the CRAN
   ## snapshot pin is not silently lost for anything installed later.
@@ -187,10 +228,22 @@ say("== verification ==")
 all_pkgs <- c(cran_pkgs, bioc_pkgs, "sparseDist")
 versions <- character(0)
 for (p in all_pkgs) {
-  have <- requireNamespace(p, quietly = TRUE)
-  v <- if (have) as.character(utils::packageVersion(p)) else NA_character_
+  ## Report the version FROM THE PINNED LIBRARY and say so when a different
+  ## copy is shadowing it elsewhere on the path -- that is the situation this
+  ## whole script exists to make impossible.
+  here <- in_lib(p)
+  v <- if (here) as.character(utils::packageVersion(p, lib.loc = LIB))
+       else NA_character_
   versions[p] <- v
-  line(p, have, if (have) v else "NOT INSTALLED")
+  other <- tryCatch(as.character(utils::packageVersion(p)),
+                    error = function(e) NA_character_)
+  detail <- if (here) {
+    if (!is.na(other) && !identical(other, v))
+      paste0(v, "  (WARNING: ", other, " also on the search path)") else v
+  } else if (!is.na(other)) {
+    paste0("NOT IN ", basename(LIB), " (", other, " found elsewhere)")
+  } else "NOT INSTALLED"
+  line(p, here, detail)
 }
 
 omp <- tryCatch(sparseDist:::ompInfoCpp(), error = function(e) NULL)
