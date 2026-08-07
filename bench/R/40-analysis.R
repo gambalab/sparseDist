@@ -100,12 +100,17 @@ check_thread_contamination <- function(res, tolerance = 1.25) {
 
 ## Replicates that did not agree. A high spread means the median is not
 ## trustworthy for that cell and it should be re-run, not quietly plotted.
-check_replication <- function(summ, cv_limit = 0.20) {
+## min_reps matters when analysing a run still in progress. Execution order is
+## randomised, so a partially complete panel has cells with one or two of their
+## five replicates done -- and a MAD computed from two observations is not a
+## spread estimate, it is a coin flip. Judging those would fail QC on every
+## partial run and train everyone to ignore the check.
+check_replication <- function(summ, cv_limit = 0.20, min_reps = 3L) {
   cols <- c("panel", "package", "method", "dataset_id", "threads", "n_reps",
             "elapsed_med", "elapsed_mad", "elapsed_cv")
   if (!nrow(summ) || !all(cols %in% names(summ))) return(empty_summary()[, 0])
   bad <- summ[is.finite(summ$elapsed_cv) & summ$elapsed_cv > cv_limit &
-              summ$elapsed_med > 0.5, , drop = FALSE]
+              summ$elapsed_med > 0.5 & summ$n_reps >= min_reps, , drop = FALSE]
   bad[order(-bad$elapsed_cv), cols, drop = FALSE]
 }
 
@@ -131,7 +136,13 @@ qc_report <- function(res, summ) {
   if (nrow(ct)) print(utils::head(ct, 15))
 
   rp <- check_replication(summ)
-  cat("\nunstable replicates (MAD/median > 0.20): ", nrow(rp), "\n", sep = "")
+  incomplete <- sum(summ$n_reps < 3L)
+  cat("\nunstable replicates (MAD/median > 0.20, >=3 reps): ", nrow(rp),
+      "\n", sep = "")
+  if (incomplete) {
+    cat("  (", incomplete, " cell(s) have fewer than 3 replicates so far and ",
+        "were not judged -- expected mid-run)\n", sep = "")
+  }
   if (nrow(rp)) print(utils::head(rp, 15))
 
   fl <- check_failures(res)

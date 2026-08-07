@@ -177,6 +177,22 @@ for (i in seq_len(n)) {
   st <- if (is.null(row)) "harness_error" else row$status
   tally <- c(tally, st)
 
+  ## Pool periodically, not only at the end.
+  ##
+  ## A task killed at cell 600 of 630 would otherwise never write its pooled
+  ## file: the per-cell results survive, but recovering them requires knowing
+  ## about --cells. On panels where a job running long enough to be killed is
+  ## the expected case, that is the wrong default.
+  if (i %% 50L == 0L) {
+    try({
+      partial <- pool_results(out_dir, strict = FALSE)
+      if (nrow(partial)) {
+        atomic_saveRDS(partial, file.path(root, "results",
+                                          paste0("results-", run_id, ".rds")))
+      }
+    }, silent = TRUE)
+  }
+
   el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
   ## rep is shown because otherwise consecutive replicates of one cell look
   ## like the driver repeating itself.
