@@ -335,11 +335,13 @@ panel_realdata <- function(run_id) {
     }
   }
 
-  ## Jensen-Shannon. Three independent implementations, all verified to agree:
-  ## ours is sqrt of proxyC's "jensen" and of philentropy's JSD at unit="log".
+  ## Jensen-Shannon. sparseDist against philentropy, which agree to seven
+  ## significant figures (ours is sqrt of philentropy's JSD at unit = "log").
+  ## proxyC was a third implementation until it was found to return an
+  ## identically zero matrix on sparse simplex input -- see ADAPTER_TABLE.
   for (n in c(1000L, 5000L, 20000L)) {
     id <- sprintf("pbmc-rna-simplex-n%d", n)
-    for (pk in c("sparseDist", "proxyC", "philentropy")) emit(id, pk, "js")
+    for (pk in c("sparseDist", "philentropy")) emit(id, pk, "js")
   }
 
   ## Dense embedding.

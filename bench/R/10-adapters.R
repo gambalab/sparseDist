@@ -73,7 +73,25 @@ ADAPTER_TABLE <- local({
     row("proxyC", "pairwise", "pearson"),
     row("proxyC", "pairwise", "euclidean"),
     row("proxyC", "pairwise", "manhattan"),
-    row("proxyC", "pairwise", "js"),
+    ## proxyC "jensen" is DELIBERATELY ABSENT.
+    ##
+    ## It accumulates only over shared support, so any pair of distributions
+    ## with disjoint non-zero patterns comes back as zero divergence -- and on
+    ## sparse simplex input the whole matrix does. Verified: a 10 x 5 simplex
+    ## matrix returns an identically zero matrix; the SAME distributions with
+    ## 1e-9 added to every entry (removing the structural zeros, changing the
+    ## values negligibly) return 0.693147 = log 2, the correct maximum for
+    ## disjoint support. Independent of digits, of magnitude, and of matrix
+    ## dimensions.
+    ##
+    ## For Jensen-Shannon those skipped terms are where the divergence lives,
+    ## so this is not a tolerance issue and cannot be corrected by an adapter.
+    ## The method matched us on a 3 x 3 DENSE toy during probing, which is the
+    ## one input shape that hides the bug -- a good argument for alignment on
+    ## real data rather than toys.
+    ##
+    ## philentropy is the JS reference instead; it agrees with sparseDist to
+    ## seven significant figures.
 
     ## ---- text2vec: row-oriented, and partly broken on Matrix 1.7.5 --------
     row("text2vec", "pairwise", "cosine"),
@@ -243,8 +261,8 @@ adapter_proxyC <- function(experiment, method, spec) {
 
   simil_method <- lookup(c(binary = "jaccard", cosine = "cosine",
                            pearson = "correlation"), method)
-  dist_method  <- lookup(c(euclidean = "euclidean", manhattan = "manhattan",
-                           js = "jensen"), method)
+  dist_method  <- lookup(c(euclidean = "euclidean",
+                           manhattan = "manhattan"), method)
   if (is.null(simil_method) && is.null(dist_method)) {
     stop("proxyC has no '", method, "' adapter", call. = FALSE)
   }
@@ -261,6 +279,9 @@ adapter_proxyC <- function(experiment, method, spec) {
       dat$X
     },
     run = function(X) {
+      ## No "jensen" mapping: see the ADAPTER_TABLE note. lookup() returning
+      ## NULL for js means get_adapter() refuses it rather than silently
+      ## producing zeros.
       if (!is.null(simil_method)) {
         proxyC::simil(X, margin = 2, method = simil_method,
                       ## use_nan = FALSE gives 0 for degenerate columns and
@@ -279,10 +300,6 @@ adapter_proxyC <- function(experiment, method, spec) {
     },
     canonical = function(out) {
       m <- as_dense(out); dimnames(m) <- NULL
-      ## proxyC's "jensen" is the divergence in NATS; ours is its square root
-      ## (probe 3: theirs / ours^2 == 1 exactly, and it matches philentropy at
-      ## unit = "log" to the digit).
-      if (identical(method, "js")) m <- sqrt(m)
       m
     }
   )

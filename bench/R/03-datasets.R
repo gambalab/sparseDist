@@ -381,10 +381,12 @@ ids_size_ladder <- function(prefix = "pbmc-rna-hvg",
 
 ## Simplex variants of the same sweep, for Jensen-Shannon.
 ##
-## Worth running even though our js kernel densifies and is therefore
-## density-INSENSITIVE: proxyC's "jensen" works on CSC and should get faster as
-## density falls, so there is a crossover here that we lose. Measuring it is
-## the point.
+## Our js kernel densifies, so its cost is density-INSENSITIVE. That was
+## originally worth sweeping against proxyC's CSC "jensen", but proxyC has been
+## removed from this comparison (its jensen skips terms where one distribution
+## is zero, returning an all-zero matrix on sparse simplex input). The sweep
+## still characterises our own kernel and philentropy across densities, which
+## is the honest remaining question: does densifying cost us at high sparsity?
 ids_density_sweep_simplex <- function(n_cols = 3000, n_rows = 2000,
                                       densities = c(0.5, 0.1, 0.05, 0.01,
                                                     0.005, 0.001)) {

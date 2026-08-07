@@ -248,6 +248,9 @@ run_alignment <- function(ids = ids_alignment(), k = 10L, verbose = TRUE) {
       ## dbscan reports shared-neighbour COUNTS, not Jaccard weights: a
       ## workflow comparator with no numerical alignment to check.
       if (identical(r$package, "dbscan")) next
+      ## Any pairing not in ADAPTER_TABLE is skipped by construction, which is
+      ## how proxyC/js stays out now that its row has been removed.
+      if (!adapter_exists(r$package, r$experiment, r$method)) next
 
       spec <- list(threads = 1L, k = k, block_size = 256L, variant = NA)
       res <- tryCatch({
