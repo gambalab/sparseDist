@@ -146,7 +146,11 @@ check("child subprocess can load packages",
 ## fall back to two places in a batch step only -- max_threads capped at 2, a
 ## whole scaling panel flat, and nothing upstream noticed. Ask a child directly.
 child_omp <- function(want = 8L) {
-  code <- 'cat(sparseDist:::ompInfoCpp()$max_threads)'
+  ## num_procs, NOT max_threads. omp_get_max_threads() just echoes
+  ## OMP_NUM_THREADS, so it reported 8 when we asked for 8 even though the
+  ## runtime could see only 2 processors -- this check passed while the panel
+  ## it was meant to protect ran at 2 threads.
+  code <- 'cat(sparseDist:::ompInfoCpp()$num_procs)'
   env <- thread_env(want)
   out <- tryCatch({
     if (requireNamespace("processx", quietly = TRUE)) {
@@ -159,10 +163,15 @@ child_omp <- function(want = 8L) {
 }
 if (isTRUE(cap$openmp)) {
   got <- child_omp(8L)
-  check("child OpenMP sees requested threads",
-        isTRUE(got >= 8L),
+  ok_child <- isTRUE(got >= cap$num_procs)
+  check("child OpenMP sees all processors", ok_child,
         if (is.na(got)) "could not query child"
-        else paste0("asked for 8, child reports max_threads = ", got))
+        else paste0("child num_procs = ", got, ", parent = ", cap$num_procs))
+  if (!ok_child && !is.na(got)) {
+    cat("      A child confined below the parent means OMP_PLACES is set\n",
+        "      somewhere in the job script or submitting shell; processx\n",
+        "      inherits it via env = c(\"current\", ...).\n", sep = "")
+  }
 }
 
 cat("\n== smoke test ==\n")

@@ -62,12 +62,23 @@ if [ -n "${CONDA_EXE:-}" ]; then
   conda activate "${BENCH_CONDA_ENV:-sparsedist}"
 fi
 
-# Defaults for the driver process only; thread_env() re-pins per cell, which is
-# what the scaling panel measures.
+# DO NOT SET OMP_PLACES HERE.
+#
+# processx launches every cell with env = c("current", thread_env(n)), which
+# INHERITS this shell's environment. An OMP_PLACES=cores exported here reaches
+# every child even after being removed from thread_env() -- and in a batch step
+# libgomp resolved it to TWO places, capping omp_get_num_procs() at 2. A whole
+# scaling panel came back flat from 2 threads to 64 because of this one line,
+# and it was invisible interactively, where the same setting resolves fine.
+#
+# Without it libgomp inherits the process affinity mask (0-63 under
+# --exclusive). OMP_PROC_BIND is fine: it binds threads for the duration of a
+# region without needing an explicit place list.
 export OMP_PROC_BIND=close
-export OMP_PLACES=cores
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+# Belt and braces: clear it even if the submitting shell had it set.
+unset OMP_PLACES
 
 echo "host        : $(hostname)"
 echo "job / task  : ${SLURM_ARRAY_JOB_ID:-na} / ${SLURM_ARRAY_TASK_ID:-na}"
