@@ -62,23 +62,26 @@ if [ -n "${CONDA_EXE:-}" ]; then
   conda activate "${BENCH_CONDA_ENV:-sparsedist}"
 fi
 
-# DO NOT SET OMP_PLACES HERE.
+# DO NOT SET OMP_PROC_BIND OR OMP_PLACES IN THIS SHELL.
 #
-# processx launches every cell with env = c("current", thread_env(n)), which
-# INHERITS this shell's environment. An OMP_PLACES=cores exported here reaches
-# every child even after being removed from thread_env() -- and in a batch step
-# libgomp resolved it to TWO places, capping omp_get_num_procs() at 2. A whole
-# scaling panel came back flat from 2 threads to 64 because of this one line,
-# and it was invisible interactively, where the same setting resolves fine.
+# Both belong in the per-cell child environment (thread_env()) and nowhere
+# else. Setting either here breaks every cell, for two compounding reasons:
 #
-# Without it libgomp inherits the process affinity mask (0-63 under
-# --exclusive). OMP_PROC_BIND is fine: it binds threads for the duration of a
-# region without needing an explicit place list.
-export OMP_PROC_BIND=close
+#   1. processx launches children with env = c("current", thread_env(n)), so
+#      anything exported here is INHERITED regardless of what thread_env does.
+#
+#   2. With OMP_PROC_BIND set, libgomp binds the DRIVER process's master thread
+#      to a single place at init. Linux CPU affinity is inherited across
+#      fork/exec, so every child starts pinned to that one core and
+#      omp_get_num_procs() reports 1. Adding OMP_PLACES=cores made it 2.
+#
+# That is how a scaling panel came back flat from 2 threads to 64, and why it
+# was invisible in an interactive session: there, nothing had exported them.
+# The driver itself needs no OpenMP settings -- it runs no parallel regions.
+unset OMP_PROC_BIND
+unset OMP_PLACES
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
-# Belt and braces: clear it even if the submitting shell had it set.
-unset OMP_PLACES
 
 echo "host        : $(hostname)"
 echo "job / task  : ${SLURM_ARRAY_JOB_ID:-na} / ${SLURM_ARRAY_TASK_ID:-na}"
