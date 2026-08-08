@@ -35,8 +35,13 @@
 #   mkdir -p bench/results/slurm
 #   export BENCH_RUN_ID=$(date -u +%Y%m%dT%H%M%S)-$(git rev-parse --short HEAD)
 #   echo $BENCH_RUN_ID | tee bench/results/CURRENT_RUN_ID
-#   sbatch --export=ALL,BENCH_RUN_ID=$BENCH_RUN_ID,BENCH_PANEL=density,scaling,coercion \
+#   sbatch --export=ALL,BENCH_RUN_ID=$BENCH_RUN_ID,BENCH_PANEL=density+scaling \
 #          bench/scripts/run.sbatch
+#
+# NOTE THE "+". --export is itself comma-separated, so a comma inside
+# BENCH_PANEL truncates it: BENCH_PANEL=coercion,realdata sets the variable to
+# "coercion" and then tries to export one called "realdata". run.R accepts
+# comma, semicolon, plus or space as panel separators for this reason.
 #
 # BENCH_RUN_ID must be set ONCE and shared by every array task and every later
 # batch, or --resume looks under an id nobody wrote and the design starts over.

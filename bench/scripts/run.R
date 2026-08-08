@@ -51,7 +51,24 @@ resume    <- "--resume"  %in% args
 allow_serial <- "--allow-no-openmp" %in% args
 limit     <- suppressWarnings(as.integer(opt("limit", NA)))
 cap_sec <- as.numeric(opt("cap", "14400"))
-panels  <- strsplit(opt("panel", paste(BENCH_PANELS, collapse = ",")), ",")[[1]]
+## Split on comma, semicolon, plus or whitespace.
+##
+## sbatch --export takes a COMMA-SEPARATED list, so
+##   --export=ALL,BENCH_PANEL=coercion,realdata
+## sets BENCH_PANEL=coercion and then tries to export a variable called
+## "realdata" -- the second panel is silently dropped and the job runs half of
+## what was asked for. Accepting other separators makes
+##   --export=ALL,BENCH_PANEL=coercion+realdata
+## work as intended.
+panels <- strsplit(opt("panel", paste(BENCH_PANELS, collapse = ",")),
+                   "[,;+[:space:]]+")[[1]]
+panels <- panels[nzchar(panels)]
+
+unknown <- setdiff(panels, BENCH_PANELS)
+if (length(unknown)) {
+  stop("unknown panel(s): ", paste(unknown, collapse = ", "),
+       "\nknown: ", paste(BENCH_PANELS, collapse = ", "), call. = FALSE)
+}
 
 ## run_id ties every result row to one invocation of the design. It must be
 ## STABLE across restarts, or --resume finds nothing and the whole design runs
