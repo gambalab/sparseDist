@@ -85,8 +85,24 @@ thread_env <- function(threads, lib_paths = .libPaths()) {
   threads <- as.character(as.integer(threads))
   c(R_LIBS                     = paste(lib_paths, collapse = .Platform$path.sep),
     OMP_NUM_THREADS            = threads,
+    ## OMP_PLACES IS DELIBERATELY NOT SET.
+    ##
+    ## OMP_PLACES=cores makes libgomp build a place list from the topology it
+    ## can enumerate. In a SLURM batch step that enumeration failed and it fell
+    ## back to TWO places -- so omp_get_max_threads() returned 2 no matter what
+    ## OMP_NUM_THREADS said, and an entire scaling panel came back flat from 2
+    ## threads to 64. The children recorded num_procs = 2, which is what
+    ## eventually gave it away.
+    ##
+    ## It is not reproducible interactively: under srun, or a direct Rscript in
+    ## the same allocation, the topology reads fine and the same setting
+    ## scales. Only the --vanilla processx child inside sbatch saw two places.
+    ##
+    ## Without OMP_PLACES, libgomp inherits the process affinity mask (verified
+    ## as 0-63 under --exclusive), which is what we wanted in the first place.
+    ## OMP_PROC_BIND is kept: binding threads for the duration of a region is
+    ## still worth having, and it does not depend on an explicit place list.
     OMP_PROC_BIND              = "close",
-    OMP_PLACES                 = "cores",
     RCPP_PARALLEL_NUM_THREADS  = threads,   # proxyC, parallelDist (TBB)
     ## BLAS pinned to 1 unconditionally: we measure each package's own
     ## parallelism, and nested BLAS threads would both distort the scaling

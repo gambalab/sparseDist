@@ -141,6 +141,30 @@ check("child subprocess can load packages",
                error = function(e) FALSE),
       "launches Rscript --vanilla and requires sparseDist + proxyC")
 
+## The PARENT seeing 64 processors proves nothing about the children, and the
+## children are what run every cell. An OMP_PLACES setting once made libgomp
+## fall back to two places in a batch step only -- max_threads capped at 2, a
+## whole scaling panel flat, and nothing upstream noticed. Ask a child directly.
+child_omp <- function(want = 8L) {
+  code <- 'cat(sparseDist:::ompInfoCpp()$max_threads)'
+  env <- thread_env(want)
+  out <- tryCatch({
+    if (requireNamespace("processx", quietly = TRUE)) {
+      processx::run(file.path(R.home("bin"), "Rscript"),
+                    args = c("--vanilla", "-e", code),
+                    env = c("current", env), error_on_status = FALSE)$stdout
+    } else NA_character_
+  }, error = function(e) NA_character_)
+  suppressWarnings(as.integer(trimws(out)))
+}
+if (isTRUE(cap$openmp)) {
+  got <- child_omp(8L)
+  check("child OpenMP sees requested threads",
+        isTRUE(got >= 8L),
+        if (is.na(got)) "could not query child"
+        else paste0("asked for 8, child reports max_threads = ", got))
+}
+
 cat("\n== smoke test ==\n")
 smoke <- tryCatch({
   set.seed(1)
