@@ -79,8 +79,12 @@ recall_set_overlap <- function(ours_idx, theirs_idx) {
 ## Default ids cover both the size axis and the DIMENSION axis, because recall
 ## turned out to depend far more on the latter.
 default_recall_ids <- function() {
-  c(ids_size_ladder("pbmc-rna-hvg", c(1000L, 5000L, 20000L)),
-    sprintf("pbmc-rna-%s-n%d", BENCH_DIM_FORMS, BENCH_DIM_N))
+  ## unique(): "pbmc-rna-hvg-n<BENCH_DIM_N>" is both the top of the size ladder
+  ## and the 2000-dimensional endpoint of the dimension series, so without this
+  ## the most expensive dataset is computed twice and appears twice in the
+  ## output table.
+  unique(c(ids_size_ladder("pbmc-rna-hvg", BENCH_SIZES),
+           sprintf("pbmc-rna-%s-n%d", BENCH_DIM_FORMS, BENCH_DIM_N)))
 }
 
 run_knn_recall <- function(ids = default_recall_ids(),

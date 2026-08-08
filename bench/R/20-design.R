@@ -49,18 +49,37 @@ BENCH_K <- 20L
 ## searched at thousands of dimensions with no projection step -- which is the
 ## regime sparseDist targets, and the regime where an exact method stays exact.
 BENCH_DIM_FORMS <- c("pca10", "pca50", "pca200", "hvg")
-BENCH_DIM_N     <- 20000L
+BENCH_DIM_N     <- 10000L
 
 BENCH_ANN_VARIANTS <- c("exact",
                         "annoy-10", "annoy-50", "annoy-200",
                         "hnsw-20", "hnsw-50", "hnsw-200")
 
-## Sizes for the ladder and the frontier. The full-pairwise methods need a
-## dense p x p double matrix -- 8p^2 bytes, so 80 GB at p = 100k and 320 GB at
-## 200k -- and will die somewhere around 120-150k on a 256 GB node. That death
-## is the frontier result, so the ladder deliberately runs past it: stopping at
-## 100k would leave the central claim untested.
-BENCH_SIZES <- c(1000L, 5000L, 20000L, 50000L, 100000L, 200000L)
+## LADDER SIZES ARE BOUNDED BY THE REAL DATA.
+##
+## The 10x PBMC bundles hold 11769 cells (scRNA) and 8728 (scATAC), so any id
+## above those returns the SAME matrix -- subsample_cols() simply hands back
+## everything it has. Requesting 20k, 50k, 100k and 200k produced four
+## identical points masquerading as a size sweep.
+##
+## Three genuinely distinct real sizes, capped below the scATAC count so the
+## same ladder works for both assays.
+BENCH_SIZES <- c(1000L, 5000L, 8000L)
+
+## FRONTIER SIZES ARE SYNTHETIC, and deliberately so.
+##
+## The frontier asks where each method stops working, which is a property of
+## the matrix DIMENSIONS and the memory budget -- not of what the columns mean.
+## A dense p x p double result is 8p^2 bytes: 5 GB at 25k, 80 GB at 100k,
+## 320 GB at 200k against a 234 GB node. Synthetic data tests that wall more
+## cleanly than subsampling could, because density stays FIXED while p varies;
+## a real subsample changes both at once.
+##
+## Density 0.01 is the realistic sparse regime and the one where the density
+## panel says the merge walk pays.
+BENCH_FRONTIER_SIZES <- c(25000L, 50000L, 100000L, 200000L)
+BENCH_FRONTIER_ROWS  <- 2000L
+BENCH_FRONTIER_DENS  <- 0.01
 
 ## Fixed reference dataset for the panels that vary something other than data.
 BENCH_REF_DATASET <- "syn-n3000-p2000-d0.05-nonneg"
@@ -212,23 +231,52 @@ panel_ladder <- function(run_id) {
   pairs <- timing_pairs("pairwise")
   out <- list()
   for (id in ids) {
-    n <- parse_dataset_id(id)$n_cols
-    ## Above this the dense p x p result cannot fit, so these are feasibility
-    ## probes rather than timings: one rep, and the frontier panel.
-    frontier <- n > 50000L
-    panel <- if (frontier) "frontier" else "ladder"
-    reps <- BENCH_REPS[[panel]]
     for (i in seq_len(nrow(pairs))) {
       pk <- pairs$package[i]; mt <- pairs$method[i]
       if (!applicable_here(pk, mt, id)) next
-      for (r in seq_len(reps)) {
+      for (r in seq_len(BENCH_REPS[["ladder"]])) {
         out[[length(out) + 1L]] <- new_cell_spec(
-          run_id = run_id, panel = panel,
-          experiment = if (frontier) "frontier" else "pairwise",
+          run_id = run_id, panel = "ladder", experiment = "pairwise",
           package = pk, method = mt, dataset_id = id,
           threads = BENCH_MAX_THREADS, phase = "kernel", rep = r, seed = r)
       }
     }
+  }
+  out
+}
+
+## FRONTIER -- where does each method stop working?
+##
+## One rep: this is a yes/no, and a cell that fails is the datum. Rows with
+## status "killed" or "timeout" must NOT be filtered out during analysis --
+## they ARE the frontier.
+##
+## sparseKNN is included at every size because it is the point of the panel:
+## it removes the O(p^2) MEMORY wall, though not the O(p^2) arithmetic, so it
+## may still hit the wall-clock cap at the top end with RAM to spare. Reporting
+## the frontier as memory-only would invite exactly the question we could not
+## then answer, which is why the cap is stated alongside it.
+panel_frontier <- function(run_id) {
+  ids <- sprintf("syn-n%d-p%d-d%s-nonneg", BENCH_FRONTIER_SIZES,
+                 BENCH_FRONTIER_ROWS,
+                 format(BENCH_FRONTIER_DENS, scientific = FALSE, trim = TRUE))
+  pairs <- timing_pairs("pairwise")
+  out <- list()
+  for (id in ids) {
+    for (i in seq_len(nrow(pairs))) {
+      pk <- pairs$package[i]; mt <- pairs$method[i]
+      if (!applicable_here(pk, mt, id)) next
+      out[[length(out) + 1L]] <- new_cell_spec(
+        run_id = run_id, panel = "frontier", experiment = "frontier",
+        package = pk, method = mt, dataset_id = id,
+        threads = BENCH_MAX_THREADS, phase = "kernel", rep = 1L, seed = 1L)
+    }
+    ## The blocked kNN path, which is what the memory claim rests on.
+    out[[length(out) + 1L]] <- new_cell_spec(
+      run_id = run_id, panel = "frontier", experiment = "knn",
+      package = "sparseDist", method = "binary", dataset_id = id,
+      threads = BENCH_MAX_THREADS, phase = "kernel", rep = 1L, seed = 1L,
+      k = BENCH_K, block_size = 256L)
   }
   out
 }
@@ -243,9 +291,11 @@ panel_knn <- function(run_id) {
   ## the honest option) and the dense low-dimensional embedding (where
   ## BiocNeighbors is at home and approximate methods actually work). Reporting
   ## only the first would flatter us; only the second would miss the point.
+  ## Both regimes: the sparse high-dimensional matrix (where exact search is
+  ## the honest option) and the dense low-dimensional embedding (where
+  ## BiocNeighbors is at home and approximate methods actually work).
   ids <- c(ids_size_ladder("pbmc-rna-hvg", BENCH_SIZES),
-           ids_size_ladder("pbmc-rna-pca50",
-                           BENCH_SIZES[BENCH_SIZES <= 100000L]))
+           ids_size_ladder("pbmc-rna-pca50", BENCH_SIZES))
   out <- list()
   for (id in ids) {
     for (mt in c("cosine", "euclidean")) {
@@ -270,8 +320,7 @@ panel_knn <- function(run_id) {
 
 panel_snn <- function(run_id) {
   ids <- c(ids_size_ladder("pbmc-rna-hvg", BENCH_SIZES),
-           ids_size_ladder("pbmc-rna-pca50",
-                           BENCH_SIZES[BENCH_SIZES <= 100000L]))
+           ids_size_ladder("pbmc-rna-pca50", BENCH_SIZES))
   out <- list()
   for (id in ids) {
     cells <- list(
@@ -328,7 +377,7 @@ panel_realdata <- function(run_id) {
   }
 
   ## scATAC, binary/Jaccard.
-  for (n in c(5000L, 20000L, 50000L)) {
+  for (n in c(1000L, 4000L, 8000L)) {   # scATAC holds 8728 cells
     id <- sprintf("pbmc-atac-bin-n%d", n)
     for (pk in c("sparseDist", "proxyC", "text2vec", "parallelDist")) {
       emit(id, pk, "binary")
@@ -339,13 +388,13 @@ panel_realdata <- function(run_id) {
   ## significant figures (ours is sqrt of philentropy's JSD at unit = "log").
   ## proxyC was a third implementation until it was found to return an
   ## identically zero matrix on sparse simplex input -- see ADAPTER_TABLE.
-  for (n in c(1000L, 5000L, 20000L)) {
+  for (n in c(1000L, 5000L, 10000L)) {
     id <- sprintf("pbmc-rna-simplex-n%d", n)
     for (pk in c("sparseDist", "philentropy")) emit(id, pk, "js")
   }
 
   ## Dense embedding.
-  for (n in c(5000L, 20000L, 50000L)) {
+  for (n in c(1000L, 5000L, 10000L)) {
     id <- sprintf("pbmc-rna-pca50-n%d", n)
     for (mt in c("cosine", "euclidean")) {
       for (pk in c("sparseDist", "proxyC", "coop", "parallelDist",
@@ -395,7 +444,8 @@ BENCH_PANELS <- c("density", "scaling", "coercion", "ladder", "frontier",
 build_design <- function(run_id, panels = BENCH_PANELS) {
   out <- list()
   add <- function(x) out <<- c(out, x)
-  if (any(c("ladder", "frontier") %in% panels)) add(panel_ladder(run_id))
+  if ("ladder"   %in% panels) add(panel_ladder(run_id))
+  if ("frontier" %in% panels) add(panel_frontier(run_id))
   if ("density"  %in% panels) add(panel_density(run_id))
   if ("scaling"  %in% panels) add(panel_scaling(run_id))
   if ("coercion" %in% panels) add(panel_coercion(run_id))
@@ -403,10 +453,6 @@ build_design <- function(run_id, panels = BENCH_PANELS) {
   if ("knn"      %in% panels) add(panel_knn(run_id))
   if ("snn"      %in% panels) add(panel_snn(run_id))
   if ("dimension" %in% panels) add(panel_dimension(run_id))
-
-  ## panel_ladder emits both ladder and frontier cells, so filter afterwards.
-  keep <- vapply(out, function(s) s$panel %in% panels, logical(1))
-  out <- out[keep]
 
   ids <- vapply(out, function(s) s$cell_id, character(1))
   if (anyDuplicated(ids)) {
