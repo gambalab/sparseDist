@@ -204,12 +204,21 @@ frontier_table <- function(res) {
     d <- f[idx, , drop = FALSE]
     okd <- d[d$status %in% "ok", , drop = FALSE]
     fail <- d[!d$status %in% c("ok", "dry_run"), , drop = FALSE]
+    ## Every field must be length 1. max() of an empty vector returns -Inf with
+    ## a warning, but max(okd$n_cols) on a zero-row frame gives numeric(0),
+    ## which makes data.frame() fail with "arguments imply differing number of
+    ## rows". A package with NO successful cell is precisely what this panel
+    ## exists to record, so the empty case is the normal one here.
+    one <- function(x, empty) if (length(x) == 1L) x else empty
     data.frame(
       package = d$package[1], method = d$method[1],
-      max_n_completed = if (nrow(okd)) max(okd$n_cols) else NA_real_,
-      min_n_failed = if (nrow(fail)) min(fail$n_cols) else NA_real_,
-      first_failure = if (nrow(fail))
-        fail$status[which.min(fail$n_cols)] else NA_character_,
+      n_ok = nrow(okd), n_failed = nrow(fail),
+      max_n_completed = one(if (nrow(okd)) max(okd$n_cols) else NA_real_,
+                            NA_real_),
+      min_n_failed = one(if (nrow(fail)) min(fail$n_cols) else NA_real_,
+                         NA_real_),
+      first_failure = one(if (nrow(fail))
+        fail$status[which.min(fail$n_cols)] else NA_character_, NA_character_),
       stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows); rownames(out) <- NULL
