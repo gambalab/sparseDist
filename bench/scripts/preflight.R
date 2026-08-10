@@ -333,6 +333,39 @@ check("all declared adapters construct", length(bad) == 0,
       if (length(bad)) paste(bad, collapse = ", ")
       else paste(nrow(ADAPTER_TABLE), "adapters"))
 
+## Every cell the DESIGN generates must resolve to an adapter.
+##
+## The check above walks ADAPTER_TABLE, so it passes whenever the table is
+## self-consistent -- and says nothing about whether the design asks for
+## combinations the table does not contain. A frontier panel built with
+## experiment = "frontier" (rather than the operation name) sailed past it and
+## then errored on 76 of 80 cells at run time. Walk the design instead.
+design_ok <- tryCatch({
+  src <- file.path(root, "R", "20-design.R")
+  if (!file.exists(src)) NA
+  else {
+    source(src, local = FALSE)
+    d <- build_design("preflight")
+    combos <- unique(data.frame(
+      package    = vapply(d, function(x) x$package, character(1)),
+      experiment = vapply(d, function(x) x$experiment, character(1)),
+      method     = vapply(d, function(x) x$method, character(1)),
+      stringsAsFactors = FALSE))
+    miss <- combos[!mapply(adapter_exists, combos$package, combos$experiment,
+                           combos$method), , drop = FALSE]
+    if (nrow(miss)) {
+      cat("      missing: ",
+          paste(utils::head(apply(miss, 1, paste, collapse = "/"), 6),
+                collapse = ", "), "\n", sep = "")
+      FALSE
+    } else TRUE
+  }
+}, error = function(e) {cat("      ", conditionMessage(e), "\n"); FALSE})
+
+if (!is.na(design_ok)) {
+  check("every designed cell has an adapter", design_ok)
+}
+
 ## --- verdict ---------------------------------------------------------------
 if (length(warnings_)) {
   cat("\nNon-blocking warnings:\n  - ",

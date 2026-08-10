@@ -266,8 +266,15 @@ panel_frontier <- function(run_id) {
     for (i in seq_len(nrow(pairs))) {
       pk <- pairs$package[i]; mt <- pairs$method[i]
       if (!applicable_here(pk, mt, id)) next
+      ## experiment = "pairwise", NOT "frontier".
+      ##
+      ## `experiment` names the OPERATION and is what get_adapter() dispatches
+      ## on; `panel` names the experimental design. Setting experiment to
+      ## "frontier" made every adapter lookup fail with "no adapter for
+      ## package X, experiment 'frontier'" -- 76 of 80 cells errored before any
+      ## work started. That distinction is the entire reason `panel` exists.
       out[[length(out) + 1L]] <- new_cell_spec(
-        run_id = run_id, panel = "frontier", experiment = "frontier",
+        run_id = run_id, panel = "frontier", experiment = "pairwise",
         package = pk, method = mt, dataset_id = id,
         threads = BENCH_MAX_THREADS, phase = "kernel", rep = 1L, seed = 1L)
     }
