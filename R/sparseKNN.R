@@ -27,6 +27,10 @@
 #' Ties at the \code{k}-th position are broken by the lower column index, so
 #' results are reproducible and do not depend on \code{ncores}.
 #'
+#' All-zero columns are dropped by default; see \code{drop_degenerate}. The
+#' resulting \code{NA} rows pass through \code{\link{sparseSNN}} unchanged,
+#' where they leave the column as an isolated node.
+#'
 #' When \code{include_self = TRUE} the exact self-comparison is restored after
 #' each block: a column is at distance 0 (similarity 1) from itself even where
 #' the rectangular kernel could not know that two columns are the same, such as
@@ -54,6 +58,13 @@
 #'   may be returned as its own neighbour. Defaults to \code{FALSE}, matching
 #'   the usual k-nearest-neighbour convention. Ignored when \code{Y} is given,
 #'   since the two matrices are then treated as unrelated.
+#' @param drop_degenerate Logical; whether all-zero columns are excluded from
+#'   the search. When \code{TRUE} (the default) such a column receives no
+#'   neighbours -- its row of the result is all \code{NA} -- and is never
+#'   returned as another column's neighbour, so no edge is invented between
+#'   columns that hold no data. Set to \code{FALSE} for \code{"euclidean"} or
+#'   \code{"manhattan"} if a zero column should be treated as a genuine point
+#'   at the origin rather than as missing data.
 #' @param block_size Number of query columns per block. Larger values do more
 #'   work per kernel call (slightly faster) at proportionally higher peak
 #'   memory. The default of 256 keeps a block near
@@ -73,7 +84,8 @@
 #'     \item{\code{dist}}{the corresponding distance or similarity values.}
 #'   }
 #'   Both carry the column names of \code{X} as row names. When a column has
-#'   fewer than \code{k} valid neighbours the remaining slots are \code{NA}.
+#'   fewer than \code{k} valid neighbours the remaining slots are \code{NA},
+#'   and a column dropped by \code{drop_degenerate} has an all-\code{NA} row.
 #'   This is the layout used by \pkg{FNN} and \pkg{RANN}; a sparse adjacency
 #'   matrix can be built from it directly, for example with
 #'   \code{Matrix::sparseMatrix(i = row(res$idx), j = res$idx, x = res$dist)}.
@@ -96,8 +108,8 @@
 #'
 #' @export
 sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
-                      include_self = FALSE, block_size = 256L,
-                      ncores = 1, verbose = TRUE) {
+                      include_self = FALSE, drop_degenerate = TRUE,
+                      block_size = 256L, ncores = 1, verbose = TRUE) {
 
   if (is.null(X)) stop("'X' must be provided.")
 
@@ -113,6 +125,7 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
   }
   chk_flag(dist, "dist")
   chk_flag(include_self, "include_self")
+  chk_flag(drop_degenerate, "drop_degenerate")
   chk_flag(verbose, "verbose")
 
   ## Count-like arguments: reject anything that is not a single finite whole
@@ -189,9 +202,27 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
   ref  <- if (selfmode) X else Y
   nref <- ncol(ref)
 
+  ## An all-zero column carries no information. Cosine and Jaccard leave its
+  ## similarity undefined, and because two empty columns are conventionally
+  ## identical (similarity 1) they would otherwise be each other's perfect
+  ## nearest neighbours -- manufacturing a tight clique of data-free columns in
+  ## any downstream graph. Such columns are therefore excluded from the search
+  ## on BOTH sides: they get no neighbours of their own, and they are never
+  ## returned as anyone else's. (For "euclidean" and "manhattan" the zero
+  ## column is a legitimate point at the origin rather than missing data, so
+  ## drop_degenerate = FALSE keeps it in play.)
+  col_is_empty <- function(M) {
+    tot <- as.numeric(Matrix::colSums(abs(M)))
+    !is.na(tot) & tot == 0
+  }
+  deg_ref   <- if (drop_degenerate) col_is_empty(ref) else rep(FALSE, nref)
+  deg_query <- if (selfmode) deg_ref else
+               if (drop_degenerate) col_is_empty(X) else rep(FALSE, nq)
+
   ## Largest possible neighbour count: in self mode a column cannot be its own
   ## neighbour unless include_self is TRUE.
-  avail <- if (selfmode && !include_self) nref - 1L else nref
+  avail <- sum(!deg_ref)
+  if (selfmode && !include_self) avail <- avail - 1L
   if (avail < 1L) stop("No candidate neighbours available.")
   if (k > avail) {
     warning("k (", k, ") exceeds the ", avail,
@@ -247,6 +278,12 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
       ## its variance, which fastCov2() already computes correctly.
     }
 
+    ## Masking to NA is enough: topKBlock skips non-finite candidates, so a
+    ## degenerate column can never occupy a neighbour slot. Applied after the
+    ## self-value restoration above, so a degenerate column does not keep a
+    ## restored self-distance either.
+    if (any(deg_ref)) D[deg_ref, ] <- NA_real_
+
     part <- topKBlock(D = D, k = k, decreasing = decreasing,
                       self_row = self_row, ncores = ncores)
 
@@ -254,6 +291,13 @@ sparseKNN <- function(X, Y = NULL, k = 10, method = "binary", dist = TRUE,
     dst[cols, ] <- part$dist
 
     if (verbose) utils::setTxtProgressBar(pb, bi)
+  }
+
+  ## A degenerate column gets no neighbours at all, matching the NA padding
+  ## the kernel already uses for unfilled slots.
+  if (any(deg_query)) {
+    idx[deg_query, ] <- NA_integer_
+    dst[deg_query, ] <- NA_real_
   }
 
   rownames(idx) <- nmX

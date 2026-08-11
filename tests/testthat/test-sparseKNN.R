@@ -345,3 +345,121 @@ test_that("cosine works in the blocked search", {
                  ncores = 1, verbose = FALSE)
   expect_identical(unname(s$dist[, 1]), rep(0, ncol(X)))
 })
+
+test_that("degenerate columns are dropped from the search", {
+  X <- as.matrix(make_X(p = 10))
+  X[, 2] <- 0                    # two all-zero columns: with the
+  X[, 5] <- 0                    # J(empty, empty) = 1 convention they would
+  Xs <- methods::as(X, "CsparseMatrix")   # otherwise be perfect neighbours
+
+  nn <- sparseKNN(Xs, k = 3, method = "binary", ncores = 1, verbose = FALSE)
+
+  # they get no neighbours of their own
+  expect_true(all(is.na(nn$idx[c(2, 5), ])))
+  expect_true(all(is.na(nn$dist[c(2, 5), ])))
+
+  # and are never returned as anyone else's
+  expect_false(any(nn$idx[-c(2, 5), ] %in% c(2L, 5L)))
+
+  # every other column still has a full set
+  expect_false(anyNA(nn$idx[-c(2, 5), ]))
+
+  # same for cosine, where the convention originates
+  cs <- sparseKNN(Xs, k = 3, method = "cosine", ncores = 1, verbose = FALSE)
+  expect_true(all(is.na(cs$idx[c(2, 5), ])))
+  expect_false(any(cs$idx[-c(2, 5), ] %in% c(2L, 5L)))
+})
+
+test_that("drop_degenerate = FALSE keeps zero columns in play", {
+  X <- as.matrix(make_X(p = 10))
+  X[, 2] <- 0
+  Xs <- methods::as(X, "CsparseMatrix")
+
+  # the origin is a legitimate point for a true distance
+  nn <- sparseKNN(Xs, k = 3, method = "euclidean", drop_degenerate = FALSE,
+                  ncores = 1, verbose = FALSE)
+  expect_false(anyNA(nn$idx))
+  expect_true(any(nn$idx == 2L))
+
+  # and it is excluded again when the flag is on
+  dropped <- sparseKNN(Xs, k = 3, method = "euclidean", drop_degenerate = TRUE,
+                       ncores = 1, verbose = FALSE)
+  expect_true(all(is.na(dropped$idx[2, ])))
+  expect_false(any(dropped$idx[-2, ] == 2L, na.rm = TRUE))
+})
+
+test_that("dropped columns become isolated nodes in the SNN graph", {
+  X <- as.matrix(make_X(p = 10))
+  X[, 3] <- 0
+  Xs <- methods::as(X, "CsparseMatrix")
+
+  nn <- sparseKNN(Xs, k = 3, method = "binary", ncores = 1, verbose = FALSE)
+  g  <- sparseSNN(nn, ncores = 1, verbose = FALSE)
+
+  expect_equal(sum(g[3, ]), 0)     # no outgoing edges
+  expect_equal(sum(g[, 3]), 0)     # and none incoming
+  expect_false(anyNA(g@x))
+})
+
+test_that("k is clamped against the non-degenerate count", {
+  X <- as.matrix(make_X(p = 6))
+  X[, 1] <- 0
+  X[, 2] <- 0
+  Xs <- methods::as(X, "CsparseMatrix")
+  # 6 columns, 2 empty, self excluded -> 3 usable neighbours
+  expect_warning(nn <- sparseKNN(Xs, k = 5, ncores = 1, verbose = FALSE),
+                 "exceeds")
+  expect_equal(ncol(nn$idx), 3L)
+})
+
+test_that("a signed column summing to zero is not treated as empty", {
+  # emptiness is decided on colSums(abs(.)), so cancellation must not count:
+  # c(1, -1) has data even though its plain column sum is 0.
+  X <- Matrix::Matrix(cbind(cancel = c(1, -1, 0, 0),
+                            empty  = c(0,  0, 0, 0),
+                            a      = c(1,  0, 1, 0),
+                            b      = c(0,  1, 0, 1)), sparse = TRUE)
+  expect_equal(sum(X[, "cancel"]), 0)          # sums to zero...
+  expect_gt(sum(abs(X[, "cancel"])), 0)        # ...but is not empty
+
+  for (m in c("euclidean", "cosine")) {
+    nn <- sparseKNN(X, k = 2, method = m, ncores = 1, verbose = FALSE)
+    expect_false(anyNA(nn$idx[1, ]), info = m)         # cancel column kept
+    expect_true(all(is.na(nn$idx[2, ])), info = m)     # empty column dropped
+    expect_false(any(nn$idx[-2, ] == 2L, na.rm = TRUE), info = m)
+    # and the cancelling column is still available as a neighbour
+    expect_true(any(nn$idx[-1, ] == 1L, na.rm = TRUE), info = m)
+  }
+})
+
+test_that("cross search handles degenerate columns on either side", {
+  clean <- Matrix::Matrix(cbind(p = c(1, 0, 1, 0), q = c(0, 1, 0, 1),
+                                r = c(1, 1, 0, 0)), sparse = TRUE)
+  holed <- Matrix::Matrix(cbind(s = c(1, 0, 0, 1), z = c(0, 0, 0, 0),
+                                t = c(0, 1, 1, 0)), sparse = TRUE)
+
+  # (a) degenerate in the QUERY matrix only: those rows are all NA, and every
+  #     reference column stays available
+  a <- sparseKNN(holed, clean, k = 2, ncores = 1, verbose = FALSE)
+  expect_equal(dim(a$idx), c(3L, 2L))
+  expect_true(all(is.na(a$idx[2, ])))
+  expect_false(anyNA(a$idx[-2, ]))
+  expect_true(all(a$idx[-2, ] %in% 1:3))
+
+  # (b) degenerate in the REFERENCE matrix only: it is never returned, and no
+  #     query row is dropped
+  b <- sparseKNN(clean, holed, k = 2, ncores = 1, verbose = FALSE)
+  expect_false(anyNA(b$idx))
+  expect_false(any(b$idx == 2L))
+
+  # (c) degenerate on both sides: the query row is NA and the reference column
+  #     is never used
+  cc <- sparseKNN(holed, holed, k = 2, ncores = 1, verbose = FALSE)
+  expect_true(all(is.na(cc$idx[2, ])))
+  expect_false(any(cc$idx == 2L, na.rm = TRUE))
+
+  # (d) k is capped against the usable REFERENCE columns, not the query count
+  expect_warning(d <- sparseKNN(clean, holed, k = 3, ncores = 1,
+                                verbose = FALSE), "exceeds")
+  expect_equal(ncol(d$idx), 2L)     # 3 reference columns, 1 empty
+})

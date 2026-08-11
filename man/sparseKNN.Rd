@@ -11,6 +11,7 @@ sparseKNN(
   method = "binary",
   dist = TRUE,
   include_self = FALSE,
+  drop_degenerate = TRUE,
   block_size = 256L,
   ncores = 1,
   verbose = TRUE
@@ -44,6 +45,14 @@ may be returned as its own neighbour. Defaults to \code{FALSE}, matching
 the usual k-nearest-neighbour convention. Ignored when \code{Y} is given,
 since the two matrices are then treated as unrelated.}
 
+\item{drop_degenerate}{Logical; whether all-zero columns are excluded from
+the search. When \code{TRUE} (the default) such a column receives no
+neighbours -- its row of the result is all \code{NA} -- and is never
+returned as another column's neighbour, so no edge is invented between
+columns that hold no data. Set to \code{FALSE} for \code{"euclidean"} or
+\code{"manhattan"} if a zero column should be treated as a genuine point
+at the origin rather than as missing data.}
+
 \item{block_size}{Number of query columns per block. Larger values do more
 work per kernel call (slightly faster) at proportionally higher peak
 memory. The default of 256 keeps a block near
@@ -66,7 +75,8 @@ A list with two \code{ncol(X)} by \code{k} matrices:
 \item{\code{dist}}{the corresponding distance or similarity values.}
 }
 Both carry the column names of \code{X} as row names. When a column has
-fewer than \code{k} valid neighbours the remaining slots are \code{NA}.
+fewer than \code{k} valid neighbours the remaining slots are \code{NA},
+and a column dropped by \code{drop_degenerate} has an all-\code{NA} row.
 This is the layout used by \pkg{FNN} and \pkg{RANN}; a sparse adjacency
 matrix can be built from it directly, for example with
 \code{Matrix::sparseMatrix(i = row(res$idx), j = res$idx, x = res$dist)}.
@@ -98,6 +108,10 @@ directed graph. Symmetrise it yourself if an undirected graph is wanted.
 
 Ties at the \code{k}-th position are broken by the lower column index, so
 results are reproducible and do not depend on \code{ncores}.
+
+All-zero columns are dropped by default; see \code{drop_degenerate}. The
+resulting \code{NA} rows pass through \code{\link{sparseSNN}} unchanged,
+where they leave the column as an isolated node.
 
 When \code{include_self = TRUE} the exact self-comparison is restored after
 each block: a column is at distance 0 (similarity 1) from itself even where
