@@ -77,3 +77,7 @@ topKBlock <- function(D, k, decreasing, self_row, ncores = 1L) {
     .Call(`_sparseDist_topKBlock`, D, k, decreasing, self_row, ncores)
 }
 
+topKRowsAccum <- function(D, k, decreasing, best_idx, best_val, col_offset, self_col, ncores = 1L, tile_rows = 64L) {
+    invisible(.Call(`_sparseDist_topKRowsAccum`, D, k, decreasing, best_idx, best_val, col_offset, self_col, ncores, tile_rows))
+}
+

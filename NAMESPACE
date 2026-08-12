@@ -2,6 +2,7 @@
 
 export(sparseDist)
 export(sparseKNN)
+export(sparseKNNCross)
 export(sparseSNN)
 import(Matrix)
 import(Rcpp)

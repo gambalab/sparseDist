@@ -284,6 +284,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// topKRowsAccum
+void topKRowsAccum(const arma::mat& D, int k, bool decreasing, Rcpp::IntegerMatrix best_idx, Rcpp::NumericMatrix best_val, int col_offset, const Rcpp::IntegerVector& self_col, int ncores, int tile_rows);
+RcppExport SEXP _sparseDist_topKRowsAccum(SEXP DSEXP, SEXP kSEXP, SEXP decreasingSEXP, SEXP best_idxSEXP, SEXP best_valSEXP, SEXP col_offsetSEXP, SEXP self_colSEXP, SEXP ncoresSEXP, SEXP tile_rowsSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type D(DSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< bool >::type decreasing(decreasingSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type best_idx(best_idxSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type best_val(best_valSEXP);
+    Rcpp::traits::input_parameter< int >::type col_offset(col_offsetSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type self_col(self_colSEXP);
+    Rcpp::traits::input_parameter< int >::type ncores(ncoresSEXP);
+    Rcpp::traits::input_parameter< int >::type tile_rows(tile_rowsSEXP);
+    topKRowsAccum(D, k, decreasing, best_idx, best_val, col_offset, self_col, ncores, tile_rows);
+    return R_NilValue;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_sparseDist_detectCoresCpp", (DL_FUNC) &_sparseDist_detectCoresCpp, 0},
@@ -305,6 +323,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_sparseDist_fastJS", (DL_FUNC) &_sparseDist_fastJS, 5},
     {"_sparseDist_fastJS2", (DL_FUNC) &_sparseDist_fastJS2, 4},
     {"_sparseDist_topKBlock", (DL_FUNC) &_sparseDist_topKBlock, 5},
+    {"_sparseDist_topKRowsAccum", (DL_FUNC) &_sparseDist_topKRowsAccum, 9},
     {NULL, NULL, 0}
 };
 
