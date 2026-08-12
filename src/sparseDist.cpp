@@ -513,6 +513,48 @@ arma::sp_mat fastCov2(const arma::sp_mat& m, const arma::sp_mat& m2,
 //  Jaccard (binary: operates on the sparsity pattern, values ignored)
 // ---------------------------------------------------------------------------
 
+// Size of the intersection of two sorted CSC column index ranges.
+//
+// Jaccard needs only |A n B|; the two column sizes come straight from col_ptrs,
+// so nothing here has to count them by walking. That removes two increments per
+// step and both tail loops of the older iterator version.
+//
+// Written against the raw CSC arrays rather than arma::sp_mat::const_col_iterator
+// because that iterator maintains an internal column cursor on every ++, which
+// costs far more than the comparison this loop is actually doing.
+//
+// The source avoids the old three-way branch: equality determines `common`,
+// while the two comparisons determine cursor advancement arithmetically.
+// Compilers may still emit a branch for the equality case -- GCC 14 and
+// Clang 17 both do at -O3 -- so this is a reduction in branching, not a
+// guarantee of branchless machine code.
+//
+// `common` accumulates the same sequence of +1 additions, in the same order, as
+// the branching version, and ie - ib is exactly what its tail loops counted, so
+// results are bit-for-bit identical rather than merely close.
+static inline double jacc_common(const arma::uword* ri1, arma::uword a, const arma::uword ae,
+                                 const arma::uword* ri2, arma::uword b, const arma::uword be)
+{
+  double common = 0.0;
+  while (a < ae && b < be) {
+    const arma::uword ra = ri1[a];
+    const arma::uword rb = ri2[b];
+    common += static_cast<double>(ra == rb);
+    a      += static_cast<arma::uword>(ra <= rb);
+    b      += static_cast<arma::uword>(rb <= ra);
+  }
+  return common;
+}
+
+// Jaccard from an intersection size and the two column sizes.
+// J(empty, empty) = 1 by convention (see the 0/0 note in the file header).
+static inline double jacc_value(double common, double ni, double nj, bool dist)
+{
+  const double denom = ni + nj - common;
+  const double sim   = (denom > 0.0) ? (common / denom) : 1.0;
+  return dist ? (1.0 - sim) : sim;
+}
+
 // [[Rcpp::export]]
 SEXP fastJacc2(const arma::sp_mat& m, const arma::sp_mat& m2,
                        int ncores=1, bool verbose=true, bool dist=true)
@@ -522,39 +564,46 @@ SEXP fastJacc2(const arma::sp_mat& m, const arma::sp_mat& m2,
                std::to_string(static_cast<unsigned long long>(m.n_rows)) + ") and m2 (" +
                std::to_string(static_cast<unsigned long long>(m2.n_rows)) + ").");
   }
-  typedef arma::sp_mat::const_col_iterator iter;
   ncores = sanitize_ncores(ncores);
   const arma::uword nc = m.n_cols, nc2 = m2.n_cols;
   const long long   nc_ll = static_cast<long long>(nc);
   arma::mat d(nc, nc2, arma::fill::zeros);
 
+  // Raw CSC access. sync() settles any pending cache in the sp_mat before the
+  // members are read; it is a no-op for matrices handed over from a dgCMatrix,
+  // but skipping it would be a latent bug for any other caller.
+  m.sync();
+  m2.sync();
+  const arma::uword* const ri  = m.row_indices;
+  const arma::uword* const cp  = m.col_ptrs;
+  const arma::uword* const ri2 = m2.row_indices;
+  const arma::uword* const cp2 = m2.col_ptrs;
+
   Progress p(clamp_progress(static_cast<unsigned long long>(nc) * static_cast<unsigned long long>(nc2)), verbose);
 
-#pragma omp parallel for num_threads(ncores) shared(d) schedule(dynamic)
+  // d is column-major and i indexes its ROWS, so consecutive i are adjacent
+  // doubles within a column: with a chunk of 1, neighbouring threads write into
+  // the same cache line. A chunk of 16 does not separate the writes by 128
+  // bytes -- the boundary between chunks is still two adjacent doubles, and may
+  // share a line -- it reduces the number of such boundaries by about 16x.
+  //
+  // This is an empirical choice, not a settled one. Per-i cost varies with
+  // column nnz, so chunking also costs some load balance; benchmark against
+  // plain schedule(dynamic) on representative data before treating it as fixed.
+#pragma omp parallel for num_threads(ncores) shared(d) schedule(dynamic, 16)
   for (long long ii = 0; ii < nc_ll; ii++) {
     if (Progress::check_abort()) continue;
     const arma::uword i = static_cast<arma::uword>(ii);
 
+    const arma::uword ib = cp[i], ie = cp[i + 1];
+    const double      ni = static_cast<double>(ie - ib);
+
     for (arma::uword j = 0; j < nc2; j++) {
-      iter i_iter = m.begin_col(i);
-      iter j_iter = m2.begin_col(j);
-      double common = 0, i_count = 0, j_count = 0;
+      const arma::uword jb = cp2[j], je = cp2[j + 1];
+      const double      nj = static_cast<double>(je - jb);
 
-      while ((i_iter != m.end_col(i)) && (j_iter != m2.end_col(j))) {
-        if (i_iter.row() == j_iter.row()) {
-          i_count++; j_count++; common++; ++i_iter; ++j_iter;
-        } else if (i_iter.row() < j_iter.row()) {
-          i_count++; ++i_iter;
-        } else {
-          j_count++; ++j_iter;
-        }
-      }
-      for (; i_iter != m.end_col(i);  ++i_iter) { i_count++; }
-      for (; j_iter != m2.end_col(j); ++j_iter) { j_count++; }
-
-      const double denom = i_count + j_count - common;
-      const double sim   = (denom > 0.0) ? (common / denom) : 1.0;  // J(empty,empty)=1
-      d(i, j) = dist ? (1.0 - sim) : sim;
+      const double common = jacc_common(ri, ib, ie, ri2, jb, je);
+      d(i, j) = jacc_value(common, ni, nj, dist);
     }
     p.increment(static_cast<unsigned long>(nc2));
   }
@@ -571,40 +620,41 @@ SEXP fastJacc2(const arma::sp_mat& m, const arma::sp_mat& m2,
 SEXP fastJacc(const arma::sp_mat& m, int ncores=1, bool verbose=true,
                       bool full=false, bool diag=true, bool dist=true)
 {
-  typedef arma::sp_mat::const_col_iterator iter;
   ncores = sanitize_ncores(ncores);
   const arma::uword ncol = m.n_cols;
   const long long   ncol_ll = static_cast<long long>(ncol);
   arma::mat d(ncol, ncol, arma::fill::zeros);
 
+  m.sync();
+  const arma::uword* const ri = m.row_indices;
+  const arma::uword* const cp = m.col_ptrs;
+
   Progress p(clamp_progress(tri_pairs(ncol, diag)), verbose);
 
+  // Plain dynamic, deliberately. The primary write d(j, i) walks CONTIGUOUSLY
+  // down column i of a column-major matrix, and each outer iteration owns a
+  // different column, so threads on adjacent i do not share cache lines. Only
+  // the full=true mirror write d(i, j) strides across columns, and that is not
+  // the path sparseKNN() uses. Meanwhile the triangle is intrinsically
+  // imbalanced -- work per i falls as i grows -- and now that each pair is much
+  // cheaper, balancing the outer loop matters relatively more. Chunking here
+  // would trade real balance on the hot path for a hazard on the cold one.
 #pragma omp parallel for num_threads(ncores) shared(d) schedule(dynamic)
   for (long long ii = 0; ii < ncol_ll; ii++) {
     if (Progress::check_abort()) continue;
     const arma::uword i = static_cast<arma::uword>(ii);
     unsigned long long steps = 0;
 
+    const arma::uword ib = cp[i], ie = cp[i + 1];
+    const double      ni = static_cast<double>(ie - ib);
+
     for (arma::uword j = (diag ? i : i + 1); j < ncol; j++) {
-      iter i_iter = m.begin_col(i);
-      iter j_iter = m.begin_col(j);
-      double common = 0, i_count = 0, j_count = 0;
+      const arma::uword jb = cp[j], je = cp[j + 1];
+      const double      nj = static_cast<double>(je - jb);
 
-      while ((i_iter != m.end_col(i)) && (j_iter != m.end_col(j))) {
-        if (i_iter.row() == j_iter.row()) {
-          i_count++; j_count++; common++; ++i_iter; ++j_iter;
-        } else if (i_iter.row() < j_iter.row()) {
-          i_count++; ++i_iter;
-        } else {
-          j_count++; ++j_iter;
-        }
-      }
-      for (; i_iter != m.end_col(i); ++i_iter) { i_count++; }
-      for (; j_iter != m.end_col(j); ++j_iter) { j_count++; }
+      const double common = jacc_common(ri, ib, ie, ri, jb, je);
+      const double val    = jacc_value(common, ni, nj, dist);
 
-      const double denom = i_count + j_count - common;
-      const double sim   = (denom > 0.0) ? (common / denom) : 1.0;  // J(empty,empty)=1
-      const double val   = dist ? (1.0 - sim) : sim;
       d(j, i) = val;
       if (full) d(i, j) = val;
       ++steps;
