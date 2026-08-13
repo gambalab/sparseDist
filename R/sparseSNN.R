@@ -239,9 +239,12 @@ sparseSNN <- function(idx, include_self = TRUE, prune = 0,
   )
 
   if (symmetrise) {
-    ## The Jaccard weight is direction-free, so where both directions exist
-    ## they already agree; pmax simply fills in the single-sided edges.
-    g <- pmax(g, Matrix::t(g))
+    ## Weights are direction-free, so where both directions exist they agree
+    ## and either copy is correct. pmax() has no sparse method: it densifies
+    ## both operands (n^2 logicals) and, past n = 46341, overflows the integer
+    ## index. Building the union from the triplets keeps everything sparse.
+    gt <- Matrix::t(g)
+    g  <- g + gt - gt * (g > 0)
   }
 
   methods::as(g, "dgCMatrix")
