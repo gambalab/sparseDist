@@ -184,7 +184,25 @@ transpose_obs_to_rows <- function(X) Matrix::t(X)
 ## region. bluster::neighborsToSNNGraph() is built to take a precomputed index,
 ## which is what makes this comparison exact rather than approximate.
 snn_indices <- function(dat, spec) {
-  nn <- sparseDist::sparseKNN(dat$X, k = spec$k %||% 20L,
+  ## Degenerate columns are dropped BEFORE the search, not masked after.
+  ##
+  ## sparseKNN() returns NA indices for all-zero columns -- it refuses to
+  ## invent neighbours for a column with no data. sparseSNN() handles that
+  ## correctly (the node ends up isolated), but bluster's build_snn_graph()
+  ## does not validate its input and dereferences NA_integer_ (INT_MIN) as an
+  ## array subscript: a hard segfault, not an R error, so it cannot even be
+  ## caught by the tryCatch around the comparison.
+  ##
+  ## Verified on the same 200 x 40 input with one zeroed column: sparseSNN
+  ## returns a graph with 894 non-zeros, bluster crashes the session.
+  ##
+  ## Dropping them here keeps the comparison well posed -- both packages see
+  ## the same index matrix. The robustness difference is a finding in its own
+  ## right and belongs in the text, not silently inside an adapter.
+  X <- dat$X
+  keep <- as.vector(Matrix::colSums(abs(X)) > 0)
+  if (!all(keep)) X <- X[, keep, drop = FALSE]
+  nn <- sparseDist::sparseKNN(X, k = spec$k %||% 20L,
                               method = "cosine", include_self = FALSE,
                               ncores = 1L, verbose = FALSE)
   nn$idx
